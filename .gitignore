@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+data
+storage
+.tools
+desktop/.build
+.env
+.env.local
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+tsconfig.tsbuildinfo
