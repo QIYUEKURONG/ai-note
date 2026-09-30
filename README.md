@@ -63,3 +63,4 @@ rm -rf "$HOME/Desktop/MindBook.app" "$HOME/Applications/MindBook.app"
 cp -R "$STAGE" "$HOME/Desktop/MindBook.app"
 cp -R "$STAGE" "$HOME/Applications/MindBook.app"
 ```
+# ai-note
