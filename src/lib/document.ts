@@ -85,10 +85,36 @@ function walkHighlights(node: TipTapNode, found: ExtractedHighlight[]) {
   }
 }
 
+function keepStoredImage(node: TipTapNode): boolean {
+  if (node.type !== "image") return true;
+  const src = String(node.attrs?.src ?? "");
+  return src.startsWith("/api/media/") || src.startsWith("data:image/") || src.startsWith("http://") || src.startsWith("https://");
+}
+
+function withoutDeadImages(node: TipTapNode): TipTapNode | null {
+  if (!keepStoredImage(node)) return null;
+  if (!node.content) return node;
+  return { ...node, content: node.content.flatMap((child) => {
+    const next = withoutDeadImages(child);
+    return next ? [next] : [];
+  }) };
+}
+
+/** blob: addresses only exist in the browser tab that created them. */
+export function dropDeadImages(doc: TipTapDoc): TipTapDoc {
+  return {
+    ...doc,
+    content: (doc.content ?? []).flatMap((node) => {
+      const next = withoutDeadImages(node);
+      return next ? [next] : [];
+    }),
+  };
+}
+
 export function parseDocument(raw: string): TipTapDoc {
   try {
     const parsed = JSON.parse(raw) as TipTapDoc;
-    if (parsed?.type === "doc") return parsed;
+    if (parsed?.type === "doc") return dropDeadImages(parsed);
   } catch {
     // fall through
   }

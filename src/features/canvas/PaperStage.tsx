@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeneratedImageRow, ImagePinRow } from "@/db/schema";
 import {
-  connectorPoints,
   layoutToPin,
   pinToLayout,
   type ImagePinPosition,
@@ -56,28 +55,16 @@ export function PaperStage(props: {
   return (
     <div className={`paper-stage ${hanging.length ? "has-pins" : ""}`} style={props.themeVars}>
       <div className="paper-origin">
-        <svg className="pin-line" aria-hidden>
-          {hanging.map(({ pin, layout, pinId }) => {
-            const line = connectorPoints(pin, layout, paperSize.width, paperSize.height);
-            return (
-              <line
-                key={pinId}
-                x1={line.x1}
-                y1={line.y1}
-                x2={line.x2}
-                y2={line.y2}
-                stroke="rgba(44,36,27,0.35)"
-                strokeWidth="1"
-              />
-            );
-          })}
-        </svg>
-        {hanging.map(({ item, layout, pin, pinId }) => (
-          <HungImage
+        {hanging.map(({ item, layout, pin, pinId }, index) => (
+          <div
             key={item.id}
+            className="hung-rail"
+            style={{ left: layout.left, width: layout.width, zIndex: pin.zIndex + 3 }}
+          >
+          <HungImage
             src={mediaUrl(item.filePath)}
             layout={layout}
-            zIndex={pin.zIndex}
+            stickTop={72 + index * (Math.min(layout.height, 132) + 14)}
             onClick={() => props.onOpenImage(item)}
             onDrag={(x, y) => {
               const next = layoutToPin(
@@ -94,6 +81,7 @@ export function PaperStage(props: {
               props.onMovePin(pinId, { ...pin, scale });
             }}
           />
+          </div>
         ))}
         <div className="paper" ref={paperRef}>
           {props.children}

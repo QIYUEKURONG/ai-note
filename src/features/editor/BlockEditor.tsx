@@ -10,9 +10,15 @@ import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { HIGHLIGHT_COLORS, parseDocument, type TipTapDoc } from "@/lib/document";
 import type { ReviewMark } from "@/domain/review";
+
+declare global {
+  interface Window {
+    mindbookInsertImage?: (src: string) => void;
+  }
+}
 
 export type EditorReview = {
   marks: ReviewMark[];
@@ -94,6 +100,88 @@ const STYLES: Array<{ id: StyleId; label: string; preview: string }> = [
   { id: "code", label: "代码块", preview: "Code" },
 ];
 
+function clipboardImage(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  const fromFiles = Array.from(data.files).find((file) => file.type.startsWith("image/"));
+  if (fromFiles) return fromFiles;
+  for (const item of Array.from(data.items)) {
+    if (item.type.startsWith("image/")) return item.getAsFile();
+  }
+  return null;
+}
+
+async function uploadPastedImage(file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch("/api/media", { method: "POST", body });
+  const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+  if (!response.ok || !data.url) throw new Error(data.error || "图片没有存下来");
+  return data.url;
+}
+
+function insertUploadedImage(view: EditorView, file: File) {
+  const image = view.state.schema.nodes.image;
+  if (!image) return;
+  void uploadPastedImage(file)
+    .then((src) => {
+      if (view.isDestroyed) return;
+      view.dispatch(view.state.tr.replaceSelectionWith(image.create({ src })));
+      view.focus();
+    })
+    .catch(() => {
+      // Leave the note unchanged when the file cannot be stored.
+    });
+}
+
+const storingImages = new Set<string>();
+
+function storeTemporaryImages(view: EditorView) {
+  const sources: string[] = [];
+  view.state.doc.descendants((node) => {
+    if (node.type.name !== "image") return;
+    const src = String(node.attrs.src ?? "");
+    if ((src.startsWith("blob:") || src.startsWith("data:image/")) && !storingImages.has(src)) {
+      sources.push(src);
+    }
+  });
+  for (const src of sources) {
+    storingImages.add(src);
+    void fetch(src)
+      .then((response) => response.blob())
+      .then((blob) => uploadPastedImage(new File([blob], "screenshot.png", { type: blob.type || "image/png" })))
+      .then((url) => {
+        if (view.isDestroyed) return;
+        let pos = -1;
+        view.state.doc.descendants((node, position) => {
+          if (node.type.name === "image" && node.attrs.src === src) pos = position;
+        });
+        const node = pos >= 0 ? view.state.doc.nodeAt(pos) : null;
+        if (!node || pos < 0) return;
+        view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: url }));
+      })
+      .finally(() => storingImages.delete(src));
+  }
+}
+
+const persistImages = Extension.create({
+  name: "persistImages",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        view() {
+          return {
+            update(view) {
+              queueMicrotask(() => {
+                if (!view.isDestroyed) storeTemporaryImages(view);
+              });
+            },
+          };
+        },
+      }),
+    ];
+  },
+});
+
 export function plainSelection(state: EditorState): string {
   const { from, to, empty } = state.selection;
   if (empty) return "";
@@ -129,17 +217,36 @@ export function BlockEditor(props: {
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, dropcursor: false }),
       Underline,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false, autolink: true }),
       Image,
+      persistImages,
       Placeholder.configure({ placeholder: "写下你真正理解过的内容…" }),
       reviewExtension(reviewRef),
     ],
     content: parseDocument(props.contentJson),
     editorProps: {
       attributes: { class: "mind-editor" },
+      handlePaste(view, event) {
+        const file = clipboardImage(event.clipboardData);
+        if (!file) return false;
+        const text = event.clipboardData?.getData("text/plain") ?? "";
+        if (text.trim()) return false;
+        event.preventDefault();
+        insertUploadedImage(view, file);
+        return true;
+      },
+      handleDrop(view, event) {
+        const file = Array.from(event.dataTransfer?.files ?? []).find((item) =>
+          item.type.startsWith("image/"),
+        );
+        if (!file) return false;
+        event.preventDefault();
+        insertUploadedImage(view, file);
+        return true;
+      },
     },
     onUpdate: ({ editor: instance }) => {
       props.onChange(instance.getJSON() as TipTapDoc);
@@ -152,6 +259,15 @@ export function BlockEditor(props: {
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     selectionCb.current?.(plainSelection(editor.state));
+    const previous = window.mindbookInsertImage;
+    window.mindbookInsertImage = (src: string) => {
+      if (!src || editor.isDestroyed) return;
+      editor.chain().focus().setImage({ src }).run();
+    };
+    return () => {
+      if (window.mindbookInsertImage) delete window.mindbookInsertImage;
+      if (previous) window.mindbookInsertImage = previous;
+    };
   }, [editor]);
 
   useEffect(() => {

@@ -639,6 +639,15 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
         {lightbox ? (
           <ImageLightbox
             image={lightbox}
+            notes={library
+              .filter((note) => note.id !== props.noteId)
+              .map((note) => ({ id: note.id, title: note.title }))}
+            onInsert={(noteId) => {
+              void api(`/api/notes/${noteId}/images`, {
+                method: "POST",
+                body: JSON.stringify({ copyImageId: lightbox.id }),
+              }).then(() => setLightbox(null));
+            }}
             onClose={() => setLightbox(null)}
             onDelete={() =>
               setConfirm({

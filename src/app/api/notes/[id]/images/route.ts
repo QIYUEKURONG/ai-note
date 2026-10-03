@@ -1,4 +1,4 @@
-import { deleteGeneratedImage, getNote, listImages } from "@/db/repos";
+import { copyGeneratedImageToNote, deleteGeneratedImage, getNote, listImages } from "@/db/repos";
 import { enqueueTask } from "@/ai/tasks/runner";
 import { bootAI, badRequest, json, notFound } from "../../../helpers";
 
@@ -15,6 +15,11 @@ export async function POST(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   if (!getNote(id)) return notFound("笔记不存在");
   const body = await request.json();
+  if (typeof body.copyImageId === "string" && body.copyImageId) {
+    const image = copyGeneratedImageToNote(body.copyImageId, id);
+    if (!image) return notFound("图片不存在");
+    return json({ image });
+  }
   const task = enqueueTask({
     noteId: id,
     type: "create_image",

@@ -283,6 +283,24 @@ export function insertGeneratedImage(input: {
   return { image, pin };
 }
 
+export function copyGeneratedImageToNote(imageId: string, noteId: string): GeneratedImageRow | null {
+  const source = getImage(imageId);
+  if (!source || !getNote(noteId)) return null;
+  const copied = insertGeneratedImage({
+    noteId,
+    prompt: source.prompt,
+    style: source.style,
+    visualType: source.visualType,
+    generationModel: source.generationModel,
+    aspectRatio: source.aspectRatio,
+    filePath: source.filePath,
+    width: source.width,
+    height: source.height,
+    metadataJson: source.metadataJson,
+  });
+  return copied.image;
+}
+
 export function updateImagePin(pinId: string, position: ImagePinPosition): ImagePinRow | null {
   getDb()
     .update(imagePins)

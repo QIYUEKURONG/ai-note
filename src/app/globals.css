@@ -506,7 +506,7 @@ button {
 
 .stage-wrap {
   flex: 1;
-  overflow: auto;
+  overflow: visible;
   padding: 28px 0 80px;
 }
 
@@ -549,6 +549,10 @@ button {
   font-family: var(--paper-font, Palatino, serif);
   font-size: var(--paper-size, 18px);
   line-height: var(--paper-leading, 1.7);
+}
+.ProseMirror,
+.mind-editor {
+  cursor: text;
 }
 
 .editor-shell {
@@ -779,10 +783,18 @@ button {
   padding: 7px 8px;
 }
 
-.hung {
+.hung-rail {
   position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.hung {
+  position: sticky;
+  top: var(--hung-top, 72px);
   z-index: 3;
-  cursor: grab;
+  cursor: default;
+  pointer-events: auto;
   background: #fff;
   padding: 8px 8px 22px;
   border: 0;
@@ -801,7 +813,16 @@ button {
   background: #8d8680;
   box-shadow: 0 1px 0 rgba(255,255,255,0.6);
 }
-.hung img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.hung img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.hung.is-dragging { cursor: grabbing; }
 .resize-handle {
   position: absolute;
   right: 6px;
@@ -809,10 +830,10 @@ button {
   width: 12px;
   height: 12px;
   border-radius: 2px;
+  cursor: nwse-resize;
   background:
     linear-gradient(135deg, transparent 50%, rgba(44, 41, 38, 0.35) 50%);
 }
-.hung:active { cursor: grabbing; }
 .pin-line {
   position: absolute;
   z-index: 2;
@@ -851,7 +872,13 @@ button {
 }
 .ProseMirror code { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .ProseMirror hr { border: 0; border-top: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); margin: 2em 0; }
-.ProseMirror img { max-width: 100%; }
+.ProseMirror img {
+  display: block;
+  max-width: min(100%, 640px);
+  height: auto;
+  margin: 12px 0;
+  border-radius: 4px;
+}
 .ProseMirror a { color: var(--paper-accent, var(--accent)); text-decoration: underline; }
 
 .side-panel {
@@ -959,8 +986,32 @@ button {
   display: flex;
   gap: 10px;
   justify-content: center;
+  flex-wrap: wrap;
   padding: 16px;
+  position: relative;
 }
+.insert-menu {
+  position: absolute;
+  right: 16px;
+  bottom: 64px;
+  width: min(280px, calc(100vw - 32px));
+  max-height: 240px;
+  overflow: auto;
+  background: #fffdf8;
+  color: var(--desk-ink);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+.insert-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: inherit;
+}
+.insert-menu button:hover { background: rgba(44, 41, 38, 0.06); }
 
 .form-grid { display: grid; gap: 10px; }
 .form-grid label { display: grid; gap: 4px; font-size: 13px; color: var(--desk-muted); }
@@ -1679,7 +1730,8 @@ button {
 .merge-picks button.is-on { box-shadow: inset 0 0 0 1px #6d5c4d; }
 .tray-chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 36px; margin: 12px 0; }
 .tray-chips span { color: var(--desk-muted); font-size: 13px; }
-.tray-chips button, .note-row-wrap { cursor: grab; }
+.note-row-wrap { cursor: default; }
+.tray-chips button { cursor: grab; }
 .tray-chips button {
   background: var(--paper);
   border-radius: 999px;

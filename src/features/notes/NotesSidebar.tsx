@@ -7,8 +7,9 @@ import { ApiKeysPanel } from "@/features/settings/ApiKeysPanel";
 import {
   filterNotes,
   formatNoteTime,
-  groupNotesByTime,
+  orderNotesByRecent,
   previewText,
+  pushRecentNoteId,
   readRecentNoteIds,
   type NoteFilter,
 } from "./browse";
@@ -28,22 +29,13 @@ export function NotesSidebar(props: {
   const [apiOpen, setApiOpen] = useState(false);
 
   useEffect(() => {
-    setRecentIds(readRecentNoteIds());
+    setRecentIds(props.activeId ? pushRecentNoteId(props.activeId) : readRecentNoteIds());
   }, [props.notes, props.activeId]);
 
-  const filtered = useMemo(
-    () => filterNotes(props.notes, { query, filter, recentIds }),
+  const ordered = useMemo(
+    () => orderNotesByRecent(filterNotes(props.notes, { query, filter, recentIds }), recentIds),
     [props.notes, query, filter, recentIds],
   );
-
-  const ordered =
-    filter === "recent"
-      ? recentIds
-          .map((id) => filtered.find((note) => note.id === id))
-          .filter((note): note is NoteRow => Boolean(note))
-      : filtered;
-
-  const groups = useMemo(() => groupNotesByTime(ordered), [ordered]);
 
   return (
     <aside className={`notes-sidebar ${props.compact ? "is-compact" : ""}`}>
@@ -107,15 +99,12 @@ export function NotesSidebar(props: {
       </div>
 
       <div className="sidebar-list">
-        {groups.length === 0 ? (
+        {ordered.length === 0 ? (
           <div className="sidebar-empty">
             {query ? "没有匹配的笔记" : filter === "favorites" ? "还没有收藏" : "还没有笔记"}
           </div>
         ) : (
-          groups.map((group) => (
-            <section key={group.id} className="note-group">
-              <header>{group.label}</header>
-              {group.notes.map((note) => (
+          ordered.map((note) => (
                 <div
                   key={note.id}
                   className={
@@ -130,7 +119,10 @@ export function NotesSidebar(props: {
                   <button
                     type="button"
                     className="note-row"
-                    onClick={() => props.onOpen(note.id)}
+                    onClick={() => {
+                      setRecentIds(pushRecentNoteId(note.id));
+                      props.onOpen(note.id);
+                    }}
                   >
                     <div className="note-row-top">
                       <strong>{note.title || "未命名笔记"}</strong>
@@ -154,8 +146,6 @@ export function NotesSidebar(props: {
                     </button>
                   ) : null}
                 </div>
-              ))}
-            </section>
           ))
         )}
       </div>

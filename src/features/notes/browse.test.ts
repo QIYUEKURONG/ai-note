@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterNotes, groupNotesByTime, matchesQuery } from "./browse";
+import { filterNotes, groupNotesByTime, matchesQuery, orderNotesByRecent } from "./browse";
 import type { NoteRow } from "@/db/schema";
 
 function note(partial: Partial<NoteRow> & Pick<NoteRow, "id" | "title">): NoteRow {
@@ -32,5 +32,18 @@ describe("browse notes", () => {
     const groups = groupNotesByTime(notes, now);
     expect(groups[0]?.id).toBe("today");
     expect(groups.some((g) => g.id === "week")).toBe(true);
+  });
+
+  it("moves a recently opened note to the front", () => {
+    const notes = [
+      note({ id: "old", title: "旧", updatedAt: 300 }),
+      note({ id: "mid", title: "中", updatedAt: 200 }),
+      note({ id: "new", title: "新", updatedAt: 100 }),
+    ];
+    expect(orderNotesByRecent(notes, ["new", "old"]).map((item) => item.id)).toEqual([
+      "new",
+      "old",
+      "mid",
+    ]);
   });
 });

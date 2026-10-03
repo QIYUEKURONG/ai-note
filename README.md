@@ -26,7 +26,11 @@ npm run dev
 
 选中一段文字再整理或生图，只处理这一段，原文不会自动改掉。确认之后才会写回；没选中时，整理可以应用到整篇。
 
-图片挂在纸边，点开可以看大图。检测是在原文上做标记。面试是单独一页，可以多轮问。
+图片挂在纸边。往下翻笔记时，图会停在视野里。点开可以看大图，也可以复制，或插入到另一篇笔记，原来的那篇还留着这张图。检测是在原文上做标记。面试是单独一页，可以多轮问。
+
+在正文里可以粘贴文字。截图用 Command+Shift+Control+4 复制后，在正文里 Command+V，图片会存进这篇笔记，刷新之后还在。
+
+左侧列表按最近打开排序。点开一篇笔记，它会排到最前面。
 
 ## 知识空间
 
@@ -44,7 +48,7 @@ npm run dev
 
 桌面和启动台里的 `MindBook.app` 是本地窗口，打开的还是这个项目。第一次若被系统拦住，在图标上右键选「打开」。
 
-源码在 `desktop/MindBook.swift`，图标是 `desktop/AppIcon.icns`。应用会读包内 `Contents/Resources/project-root` 里的项目路径。本机 3000 端口没开时，它会自己拉起开发服务。
+源码在 `desktop/MindBook.swift`，图标是 `desktop/AppIcon.icns`。应用会读包内 `Contents/Resources/project-root` 里的项目路径。它先找已经开着的 MindBook（3001，其次 3000）。都没有时，在 3001 拉起开发服务。窗口里可以用 Command+C / V 复制和粘贴，截图也会贴进正文。
 
 重新编译并装到桌面和启动台：
 
@@ -63,4 +67,3 @@ rm -rf "$HOME/Desktop/MindBook.app" "$HOME/Applications/MindBook.app"
 cp -R "$STAGE" "$HOME/Desktop/MindBook.app"
 cp -R "$STAGE" "$HOME/Applications/MindBook.app"
 ```
-# ai-note

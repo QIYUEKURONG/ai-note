@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyDocument, documentToText, extractHighlights, HIGHLIGHT_COLORS } from "@/lib/document";
+import { dropDeadImages, emptyDocument, documentToText, extractHighlights, HIGHLIGHT_COLORS } from "@/lib/document";
 import { hashContent } from "@/lib/id";
 
 describe("document", () => {
@@ -25,6 +25,19 @@ describe("document", () => {
       ],
     });
     expect(highlights).toEqual([{ text: "ISR", color: HIGHLIGHT_COLORS.yellow }]);
+  });
+
+  it("drops temporary blob images and keeps stored ones", () => {
+    const doc = dropDeadImages({
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "MYSQL" }] },
+        { type: "image", attrs: { src: "blob:http://127.0.0.1:3000/abc" } },
+        { type: "image", attrs: { src: "/api/media/kept.png" } },
+      ],
+    });
+    expect(doc.content?.map((node) => node.type)).toEqual(["heading", "image"]);
+    expect(doc.content?.[1]?.attrs?.src).toBe("/api/media/kept.png");
   });
 
   it("hashes content stably", () => {

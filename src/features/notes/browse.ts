@@ -39,6 +39,19 @@ export function filterNotes(
   });
 }
 
+/** Most recently opened notes first, then the rest by last edit. */
+export function orderNotesByRecent(notes: NoteRow[], recentIds: string[]): NoteRow[] {
+  const rank = new Map(recentIds.map((id, index) => [id, index]));
+  return [...notes].sort((a, b) => {
+    const left = rank.get(a.id);
+    const right = rank.get(b.id);
+    if (left !== undefined && right !== undefined && left !== right) return left - right;
+    if (left !== undefined) return -1;
+    if (right !== undefined) return 1;
+    return b.updatedAt - a.updatedAt;
+  });
+}
+
 export function groupNotesByTime(notes: NoteRow[], now = Date.now()): NoteGroup[] {
   const today = startOfDay(now);
   const yesterday = today - 24 * 60 * 60 * 1000;
