@@ -78,8 +78,11 @@ final class NoteWebView: WKWebView {
     }
 }
 
-final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate, NSWindowDelegate {
+final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate, WKDownloadDelegate, WKScriptMessageHandler, NSWindowDelegate {
     private var mainWindow: NSWindow?
+    private var pdfWeb: WKWebView?
+    private var pdfName = "笔记.pdf"
+    private weak var exportReply: WKWebView?
     private var petWindow: NSWindow?
     private var server: Process?
     private var startedServer = false
@@ -198,8 +201,63 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         true
     }
 
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "mindbook", let body = message.body as? [String: Any], let kind = body["kind"] as? String else { return }
+        exportReply = message.webView
+        let filename = (body["filename"] as? String)?.isEmpty == false ? (body["filename"] as? String)! : "笔记"
+        if kind == "file", let content = body["content"] as? String {
+            saveAndReveal(Data(content.utf8), filename: filename)
+            return
+        }
+        if kind == "pdf", let html = body["html"] as? String {
+            renderPDF(html, filename: filename)
+        }
+    }
+
+    private func renderPDF(_ html: String, filename: String) {
+        pdfWeb?.removeFromSuperview()
+        let web = WKWebView(frame: NSRect(x: -2400, y: 0, width: 794, height: 1123))
+        web.navigationDelegate = self
+        pdfName = filename
+        pdfWeb = web
+        mainWindow?.contentView?.addSubview(web)
+        web.loadHTMLString(html, baseURL: URL(string: "http://127.0.0.1:\(port)/"))
+    }
+
+    private func saveAndReveal(_ data: Data, filename: String) {
+        let destination = uniqueDownloadURL(filename)
+        do {
+            try data.write(to: destination)
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+            reportExport("已保存到「下载」")
+        } catch {
+            reportExport("没有保存成功")
+        }
+    }
+
+    private func uniqueDownloadURL(_ filename: String) -> URL {
+        let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        var destination = folder.appendingPathComponent(filename)
+        let base = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        var index = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            let name = ext.isEmpty ? "\(base) \(index)" : "\(base) \(index).\(ext)"
+            destination = folder.appendingPathComponent(name)
+            index += 1
+        }
+        return destination
+    }
+
+    private func reportExport(_ text: String) {
+        let quoted = text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
+        exportReply?.evaluateJavaScript("window.mindbookExportDone && window.mindbookExportDone('\(quoted)')")
+    }
+
     private func attachWeb(to window: NSWindow, path: String) {
-        let web = NoteWebView(frame: window.contentView?.bounds ?? .zero)
+        let config = WKWebViewConfiguration()
+        config.userContentController.add(self, name: "mindbook")
+        let web = NoteWebView(frame: window.contentView?.bounds ?? .zero, configuration: config)
         web.autoresizingMask = [.width, .height]
         web.uiDelegate = self
         web.navigationDelegate = self
@@ -295,17 +353,67 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        preferences: WKWebpagePreferences,
+        decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void
     ) {
-        if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
-            NSWorkspace.shared.open(url)
-            decisionHandler(.cancel)
+        if navigationAction.shouldPerformDownload {
+            decisionHandler(.download, preferences)
             return
         }
-        decisionHandler(.allow)
+        if navigationAction.targetFrame == nil, let url = navigationAction.request.url, url.scheme != "blob" {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel, preferences)
+            return
+        }
+        decisionHandler(.allow, preferences)
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    func download(
+        _ download: WKDownload,
+        decideDestinationUsing response: URLResponse,
+        suggestedFilename: String,
+        completionHandler: @escaping (URL?) -> Void
+    ) {
+        let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        let suggested = suggestedFilename.isEmpty ? "笔记.md" : suggestedFilename
+        var destination = folder.appendingPathComponent(suggested)
+        let base = (suggested as NSString).deletingPathExtension
+        let ext = (suggested as NSString).pathExtension
+        var index = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            let name = ext.isEmpty ? "\(base) \(index)" : "\(base) \(index).\(ext)"
+            destination = folder.appendingPathComponent(name)
+            index += 1
+        }
+        completionHandler(destination)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === pdfWeb {
+            let script = "Promise.all(Array.from(document.images).map(img => img.complete ? 1 : new Promise(r => { img.onload = r; img.onerror = r }))).then(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))"
+            webView.evaluateJavaScript(script) { [weak self] result, _ in
+                guard let self else { return }
+                let height = CGFloat((result as? NSNumber)?.doubleValue ?? 1200)
+                webView.setFrameSize(NSSize(width: 794, height: max(height, 400)))
+                webView.createPDF(configuration: WKPDFConfiguration()) { result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let data):
+                            self.saveAndReveal(data, filename: self.pdfName)
+                        case .failure:
+                            self.reportExport("PDF 没有生成")
+                        }
+                        self.pdfWeb?.removeFromSuperview()
+                        self.pdfWeb = nil
+                    }
+                }
+            }
+            return
+        }
         webView.window?.makeFirstResponder(webView)
     }
 

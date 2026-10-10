@@ -10,6 +10,7 @@ import { NoteAtlas } from "@/features/notes/NoteAtlas";
 import { ReminderButton } from "@/features/notes/ReminderButton";
 import { pushRecentNoteId } from "@/features/notes/browse";
 import { BlockEditor } from "@/features/editor/BlockEditor";
+import { ExportMenu } from "@/features/export/ExportMenu";
 import { ImageLightbox } from "@/features/canvas/ImageLightbox";
 import { PaperStage, type HungItem } from "@/features/canvas/PaperStage";
 import { OrganizeStudio } from "@/features/organize/OrganizeStudio";
@@ -399,6 +400,11 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
               />
               {mode === "read" ? (
                 <>
+                  <ExportMenu
+                    title={title}
+                    contentJson={data.note.contentJson}
+                    images={data.images}
+                  />
                   <div className="appearance-anchor" ref={appearanceRef}>
                     <button
                       type="button"

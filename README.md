@@ -32,6 +32,8 @@ npm run dev
 
 左侧列表按最近打开排序。点开一篇笔记，它会排到最前面。
 
+顶栏「导出」可以把当前这篇存成 PDF、Markdown、HTML 或纯文本。在本地应用里，文件会进「下载」文件夹，并在访达里打开。
+
 ## 知识空间
 
 首页是知识空间：最近学习、知识地图、待复习、知识缺口、合并笔记。
@@ -48,7 +50,7 @@ npm run dev
 
 桌面和启动台里的 `MindBook.app` 是本地窗口，打开的还是这个项目。第一次若被系统拦住，在图标上右键选「打开」。
 
-源码在 `desktop/MindBook.swift`，图标是 `desktop/AppIcon.icns`。应用会读包内 `Contents/Resources/project-root` 里的项目路径。它先找已经开着的 MindBook（3001，其次 3000）。都没有时，在 3001 拉起开发服务。窗口里可以用 Command+C / V 复制和粘贴，截图也会贴进正文。
+源码在 `desktop/MindBook.swift`，图标是 `desktop/AppIcon.icns`。应用会读包内 `Contents/Resources/project-root` 里的项目路径。它先找已经开着的 MindBook（3001，其次 3000）。都没有时，在 3001 拉起开发服务。窗口里可以用 Command+C / V 复制和粘贴，截图也会贴进正文。导出的文件会保存到「下载」。
 
 重新编译并装到桌面和启动台：
 

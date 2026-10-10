@@ -1107,6 +1107,47 @@ button {
 }
 
 .appearance-anchor { position: relative; }
+.export-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 196px;
+  padding: 6px;
+  background: #fffcf8;
+  border: 1px solid rgba(44, 41, 38, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(40, 32, 24, 0.12);
+  z-index: 40;
+}
+.export-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--desk-ink);
+  font-size: 13px;
+}
+.export-menu button:hover { background: rgba(44, 41, 38, 0.06); }
+.export-menu small {
+  display: block;
+  margin-top: 2px;
+  color: var(--desk-muted);
+  font-size: 11px;
+}
+.export-toast {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #2c241b;
+  color: #fffdf8;
+  font-size: 12px;
+  z-index: 41;
+}
 .appearance-card {
   position: absolute;
   top: calc(100% + 8px);
