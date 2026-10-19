@@ -8,6 +8,10 @@ import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
+import Table from "@tiptap/extension-table";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TableRow from "@tiptap/extension-table-row";
 import Underline from "@tiptap/extension-underline";
 import { Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
@@ -218,6 +222,10 @@ export function BlockEditor(props: {
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, dropcursor: false }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Underline,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false, autolink: true }),

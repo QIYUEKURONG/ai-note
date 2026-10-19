@@ -62,7 +62,24 @@ function blockMarkdown(node: TipTapNode): string {
   }
   if (node.type === "horizontalRule") return "---\n\n";
   if (node.type === "image") return `![](${String(node.attrs?.src ?? "")})\n\n`;
+  if (node.type === "table") return `${tableMarkdown(node)}\n\n`;
   return (node.content ?? []).map(blockMarkdown).join("");
+}
+
+function tableMarkdown(node: TipTapNode): string {
+  const rows = (node.content ?? []).map((row) =>
+    (row.content ?? []).map((cell) => inline(cell, "md").replace(/\|/g, "\\|").replace(/\n+/g, " ").trim()),
+  );
+  if (!rows.length) return "";
+  const width = Math.max(...rows.map((row) => row.length));
+  const padded = rows.map((row) => {
+    const next = [...row];
+    while (next.length < width) next.push("");
+    return next;
+  });
+  const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
+  const rule = `| ${padded[0].map(() => "---").join(" | ")} |`;
+  return [line(padded[0]), rule, ...padded.slice(1).map(line)].join("\n");
 }
 
 function blockHtml(node: TipTapNode): string {
@@ -87,7 +104,20 @@ function blockHtml(node: TipTapNode): string {
   if (node.type === "image") {
     return `<img src="${escapeHtml(String(node.attrs?.src ?? ""))}" alt="">`;
   }
+  if (node.type === "table") return tableHtml(node);
   return (node.content ?? []).map(blockHtml).join("");
+}
+
+function tableHtml(node: TipTapNode): string {
+  const rows = node.content ?? [];
+  if (!rows.length) return "";
+  const header = rows[0]?.content?.[0]?.type === "tableHeader";
+  const renderRow = (row: TipTapNode, tag: string) =>
+    `<tr>${(row.content ?? []).map((cell) => `<${tag}>${inline(cell, "html")}</${tag}>`).join("")}</tr>`;
+  const head = header ? `<thead>${renderRow(rows[0], "th")}</thead>` : "";
+  const bodyRows = header ? rows.slice(1) : rows;
+  const body = bodyRows.length ? `<tbody>${bodyRows.map((row) => renderRow(row, "td")).join("")}</tbody>` : "";
+  return `<table>${head}${body}</table>`;
 }
 
 export function noteToMarkdown(title: string, doc: TipTapDoc, imageSrcs: string[] = []): string {
@@ -111,6 +141,9 @@ export function noteToHtml(title: string, doc: TipTapDoc, imageSrcs: string[] = 
   h1 { font-weight: 500; font-size: 32px; margin: 0 0 24px; }
   h2, h3 { font-weight: 500; }
   img { display: block; max-width: 100%; height: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; }
+  th, td { text-align: left; vertical-align: baseline; padding: 8px 16px 8px 0; border-bottom: 1px solid #e4d8c8; }
+  th { font-weight: 600; }
   pre { background: #f6f1ea; padding: 14px 16px; overflow: auto; border-radius: 8px; }
   blockquote { margin: 0; padding-left: 16px; border-left: 3px solid #e4d8c8; color: #5c5148; }
   mark { background: #f4d35e; }

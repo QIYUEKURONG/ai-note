@@ -880,6 +880,28 @@ button {
   border-radius: 4px;
 }
 .ProseMirror a { color: var(--paper-accent, var(--accent)); text-decoration: underline; }
+.ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.85em 0 1.15em;
+  table-layout: auto;
+}
+.ProseMirror th,
+.ProseMirror td {
+  padding: 7px 18px 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--paper-ink) 16%, transparent);
+  text-align: left;
+  vertical-align: baseline;
+}
+.ProseMirror th {
+  font-weight: 600;
+  border-bottom-width: 1.5px;
+}
+.ProseMirror th p,
+.ProseMirror td p { margin: 0; }
+.ProseMirror .selectedCell {
+  background: color-mix(in srgb, var(--paper-accent, var(--accent)) 12%, transparent);
+}
 
 .side-panel {
   max-width: 560px;

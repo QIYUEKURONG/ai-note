@@ -33,4 +33,34 @@ describe("export note", () => {
 
     expect(noteToPlainText("KAFKA", doc)).toContain("分区只会被一个消费者读取");
   });
+
+  it("exports a table with aligned columns", () => {
+    const table: TipTapDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "层" }] }] },
+                { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "可丢性" }] }] },
+              ],
+            },
+            {
+              type: "tableRow",
+              content: [
+                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "MySQL" }] }] },
+                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "不丢" }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(noteToMarkdown("小结", table)).toContain("| 层 | 可丢性 |\n| --- | --- |\n| MySQL | 不丢 |");
+    expect(noteToHtml("小结", table)).toContain("<th>层</th><th>可丢性</th>");
+    expect(noteToHtml("小结", table)).toContain("<td>MySQL</td><td>不丢</td>");
+  });
 });

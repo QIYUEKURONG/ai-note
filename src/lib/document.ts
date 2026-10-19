@@ -114,11 +114,97 @@ export function dropDeadImages(doc: TipTapDoc): TipTapDoc {
 export function parseDocument(raw: string): TipTapDoc {
   try {
     const parsed = JSON.parse(raw) as TipTapDoc;
-    if (parsed?.type === "doc") return dropDeadImages(parsed);
+    if (parsed?.type === "doc") return liftMarkdownTables(dropDeadImages(parsed));
   } catch {
     // fall through
   }
   return emptyDocument();
+}
+
+function splitTableCells(line: string): string[] {
+  const body = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return body.split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = splitTableCells(line);
+  return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isPipeRow(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.length > 2;
+}
+
+/** Pipe rows in a proportional font never line up. A real table does. */
+export function markdownTableNode(source: string): TipTapNode | null {
+  const lines = source
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length < 2 || !lines.every(isPipeRow)) return null;
+  const separatorAt = lines.findIndex(isTableSeparator);
+  if (separatorAt < 0) return null;
+  const columnCount = splitTableCells(lines[separatorAt]).length;
+  if (columnCount < 2) return null;
+  const rows: TipTapNode[] = [];
+  lines.forEach((line, index) => {
+    if (index === separatorAt) return;
+    const cells = splitTableCells(line);
+    const header = index < separatorAt;
+    const rowCells: TipTapNode[] = [];
+    for (let column = 0; column < columnCount; column += 1) {
+      const text = cells[column] ?? "";
+      rowCells.push({
+        type: header ? "tableHeader" : "tableCell",
+        content: [
+          text
+            ? { type: "paragraph", content: [{ type: "text", text }] }
+            : { type: "paragraph" },
+        ],
+      });
+    }
+    rows.push({ type: "tableRow", content: rowCells });
+  });
+  if (!rows.length) return null;
+  return { type: "table", content: rows };
+}
+
+function paragraphSource(node: TipTapNode): string | null {
+  if (node.type !== "paragraph") return null;
+  if (!node.content?.length) return "";
+  let text = "";
+  for (const child of node.content) {
+    if (child.type === "hardBreak") {
+      text += "\n";
+      continue;
+    }
+    if (child.type === "text" && !child.marks?.length) {
+      text += child.text ?? "";
+      continue;
+    }
+    return null;
+  }
+  return text;
+}
+
+function takeMarkdownTable(lines: string[], start: number): { table: TipTapNode; next: number } | null {
+  if (!isPipeRow(lines[start] ?? "")) return null;
+  let end = start;
+  while (end + 1 < lines.length && lines[end + 1].trim() && isPipeRow(lines[end + 1])) end += 1;
+  const table = markdownTableNode(lines.slice(start, end + 1).join("\n"));
+  if (!table) return null;
+  return { table, next: end + 1 };
+}
+
+function liftNode(node: TipTapNode): TipTapNode {
+  if (node.type === "paragraph") return markdownTableNode(paragraphSource(node) ?? "") ?? node;
+  if (!node.content) return node;
+  return { ...node, content: node.content.map(liftNode) };
+}
+
+export function liftMarkdownTables(doc: TipTapDoc): TipTapDoc {
+  return { ...doc, content: (doc.content ?? []).map(liftNode) };
 }
 
 export function appendMarkdownBlocks(doc: TipTapDoc, markdown: string, heading: string): TipTapDoc {
@@ -140,13 +226,21 @@ export function appendMarkdownBlocks(doc: TipTapDoc, markdown: string, heading: 
       content: [{ type: "text", text }],
     });
   };
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     if (line.startsWith("```")) {
       flush();
       continue;
     }
     if (line.trim() === "") {
       flush();
+      continue;
+    }
+    const table = takeMarkdownTable(lines, index);
+    if (table) {
+      flush();
+      content.push(table.table);
+      index = table.next - 1;
       continue;
     }
     buffer.push(line.replace(/^#{1,6}\s*/, "").replace(/^[-*]\s+/, "• "));
@@ -175,14 +269,22 @@ export function documentFromOrganizedMarkdown(markdown: string, title: string): 
     if (!text) return;
     content.push({ type: "paragraph", content: [{ type: "text", text }] });
   };
-  for (const line of markdown.split("\n")) {
-    const trimmed = line.trim();
+  const lines = markdown.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
     if (trimmed.startsWith("```")) {
       flush();
       continue;
     }
     if (!trimmed) {
       flush();
+      continue;
+    }
+    const table = takeMarkdownTable(lines, index);
+    if (table) {
+      flush();
+      content.push(table.table);
+      index = table.next - 1;
       continue;
     }
     const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed);
