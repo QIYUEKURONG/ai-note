@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectImages,
   documentFromOrganizedMarkdown,
   documentToText,
   dropDeadImages,
   emptyDocument,
   extractHighlights,
   HIGHLIGHT_COLORS,
+  noteSourceForOrganize,
   parseDocument,
 } from "@/lib/document";
 import { hashContent } from "@/lib/id";
@@ -76,6 +78,50 @@ describe("document", () => {
 
     const organized = documentFromOrganizedMarkdown(`三、要点小结\n\n${source}\n\n• 判重靠 SADD`, "REDIS");
     expect(organized.content?.some((node) => node.type === "table")).toBe(true);
+  });
+
+  it("turns fences, highlights, and lists into real blocks", () => {
+    const doc = documentFromOrganizedMarkdown(
+      ["## 机制", "", "记住 ==ISR== 和 **副本**。", "", "```ts", "const n = 1", "```", "", "- 先写进日志", "- 再提交"].join(
+        "\n",
+      ),
+      "Kafka",
+    );
+    const heading = doc.content?.find((node) => node.type === "heading" && node.attrs?.level === 3);
+    expect(heading?.content?.some((node) => node.text === "机制")).toBe(true);
+    const paragraph = doc.content?.find((node) => node.type === "paragraph");
+    expect(paragraph?.content?.find((node) => node.text === "ISR")?.marks?.[0]).toEqual({
+      type: "highlight",
+      attrs: { color: HIGHLIGHT_COLORS.yellow },
+    });
+    expect(paragraph?.content?.find((node) => node.text === "副本")?.marks?.[0]?.type).toBe("bold");
+    const code = doc.content?.find((node) => node.type === "codeBlock");
+    expect(code?.attrs?.language).toBe("ts");
+    expect(code?.content?.[0]?.text).toBe("const n = 1");
+    expect(doc.content?.some((node) => node.type === "bulletList")).toBe(true);
+    expect(documentToText(doc)).toContain("先写进日志");
+  });
+
+  it("keeps pictures when a note is rewritten", () => {
+    const previous = {
+      type: "doc" as const,
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前面" }] },
+        { type: "image", attrs: { src: "/api/media/a.png" } },
+        { type: "image", attrs: { src: "blob:http://127.0.0.1:3000/tmp" } },
+        { type: "paragraph", content: [{ type: "text", text: "后面" }] },
+      ],
+    };
+    const source = noteSourceForOrganize(previous);
+    expect(source.indexOf("[[图1]]")).toBeGreaterThan(source.indexOf("前面"));
+    expect(source).not.toContain("[[图2]]");
+    const kept = collectImages(previous);
+    const placed = documentFromOrganizedMarkdown(`前面\n\n[[图1]]\n\n后面`, "标题", kept);
+    expect(placed.content?.map((node) => node.type)).toEqual(["heading", "paragraph", "image", "paragraph"]);
+    expect(placed.content?.[2]?.attrs?.src).toBe("/api/media/a.png");
+
+    const appended = documentFromOrganizedMarkdown("只有文字", "标题", kept);
+    expect(appended.content?.at(-1)).toMatchObject({ type: "image", attrs: { src: "/api/media/a.png" } });
   });
 
   it("hashes content stably", () => {

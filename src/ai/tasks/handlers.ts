@@ -23,6 +23,7 @@ import { buildImagePrompt, type KnowledgeCardSpec } from "../services/prompt-ima
 import { evaluateAnswer, generateCheckQuestions } from "../services/check";
 import { finishInterview, nextInterviewQuestion } from "../services/interview";
 import { reviewNote } from "../services/review";
+import { noteSourceForOrganize, parseDocument } from "@/lib/document";
 import { saveImageFile } from "@/lib/storage";
 import { createId } from "@/lib/id";
 import { answerRecall, buildAtlas, findGaps, mergeNotes, planReview } from "./knowledge-handlers";
@@ -51,7 +52,7 @@ const generateSummary: TaskHandler = async (task) => {
   const result = await organizeNote({
     chat: getAIProvider().chat,
     title: note.title,
-    content: selection || note.contentText,
+    content: selection || noteSourceForOrganize(parseDocument(note.contentJson)),
     highlights: selection
       ? note.highlights.map((item) => item.text).filter((text) => selection.includes(text))
       : note.highlights.map((item) => item.text),

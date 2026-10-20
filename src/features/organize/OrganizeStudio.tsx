@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ORGANIZE_KINDS, organizeKindLabel, type OrganizeKind } from "@/domain/organize-kinds";
+import { documentFromOrganizedMarkdown, type TipTapNode } from "@/lib/document";
 import type { AIResultRow } from "@/db/schema";
 
 const FOCUS: Array<{ id: OrganizeKind; hint: string }> = [
+  { id: "study_note", hint: "小标题、代码框、重点词，适合复习" },
+  { id: "code_box", hint: "把代码和命令放进独立的框" },
+  { id: "key_terms", hint: "给必须记住的词标上重点" },
   { id: "markdown", hint: "整理成可以读下去的正文" },
   { id: "structured", hint: "分层、分点，留下骨架" },
   { id: "outline", hint: "从标题看到知识树" },
@@ -31,6 +35,7 @@ export function OrganizeStudio(props: {
   onBack: () => void;
   scoped?: boolean;
   notice?: string;
+  images?: TipTapNode[];
 }) {
   const [more, setMore] = useState(false);
   const active = props.scoped
@@ -104,6 +109,14 @@ export function OrganizeStudio(props: {
         <article className="sheet">
           <header>{props.scoped ? "选中" : "原文"}</header>
           <h2>{props.title || "未命名笔记"}</h2>
+          {props.images?.length ? (
+            <div className="sheet-images">
+              {props.images.map((image, index) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={`${String(image.attrs?.src ?? "")}-${index}`} src={String(image.attrs?.src ?? "")} alt="" />
+              ))}
+            </div>
+          ) : null}
           <div className="sheet-body">{props.source.trim() || "这篇笔记还没有正文。"}</div>
         </article>
         <article className="sheet sheet-result">
@@ -115,15 +128,7 @@ export function OrganizeStudio(props: {
           </header>
           {props.running && !active ? <div className="sheet-wait">正在阅读这篇笔记…</div> : null}
           {active ? (
-            <div
-              className="sheet-body"
-              dangerouslySetInnerHTML={{
-                __html: escapeHtml(active.body).replaceAll(
-                  "[AI推测]",
-                  '<span class="spec">[AI推测]</span>',
-                ),
-              }}
-            />
+            <RichMarkdown markdown={active.body} images={props.scoped ? [] : props.images ?? []} />
           ) : !props.running ? (
             <div className="sheet-wait">
               {props.scoped
@@ -153,10 +158,72 @@ export function OrganizeStudio(props: {
   );
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\n", "<br/>");
+function RichMarkdown(props: { markdown: string; images: TipTapNode[] }) {
+  const nodes = documentFromOrganizedMarkdown(props.markdown, "", props.images).content?.slice(1) ?? [];
+  return (
+    <div className="sheet-rich">
+      {nodes.map((node, index) => (
+        <RichNode key={index} node={node} />
+      ))}
+    </div>
+  );
+}
+
+function RichNode(props: { node: TipTapNode }) {
+  const node = props.node;
+  const children = node.content?.map((child, index) => <RichNode key={index} node={child} />) ?? null;
+  if (node.type === "heading") {
+    const level = Number(node.attrs?.level ?? 2);
+    if (level <= 2) return <h3>{children}</h3>;
+    return <h4>{children}</h4>;
+  }
+  if (node.type === "paragraph") return <p>{children}</p>;
+  if (node.type === "bulletList") return <ul>{children}</ul>;
+  if (node.type === "orderedList") return <ol>{children}</ol>;
+  if (node.type === "listItem") return <li>{children}</li>;
+  if (node.type === "blockquote") return <blockquote>{children}</blockquote>;
+  if (node.type === "horizontalRule") return <hr />;
+  if (node.type === "hardBreak") return <br />;
+  if (node.type === "codeBlock") {
+    const text = node.content?.map((child) => child.text ?? "").join("") ?? "";
+    const language = String(node.attrs?.language ?? "");
+    return (
+      <pre>
+        {language ? <span className="code-lang">{language}</span> : null}
+        {text}
+      </pre>
+    );
+  }
+  if (node.type === "image") {
+    const src = String(node.attrs?.src ?? "");
+    if (!src) return null;
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" />;
+  }
+  if (node.type === "table") return <table><tbody>{children}</tbody></table>;
+  if (node.type === "tableRow") return <tr>{children}</tr>;
+  if (node.type === "tableHeader") return <th>{children}</th>;
+  if (node.type === "tableCell") return <td>{children}</td>;
+  if (node.type === "text") return <MarkedText text={node.text ?? ""} marks={node.marks} />;
+  return children ? <>{children}</> : null;
+}
+
+function MarkedText(props: { text: string; marks?: TipTapNode["marks"] }) {
+  const parts = props.text.split("[AI推测]");
+  let body: ReactNode = parts.map((part, index) => (
+    <span key={index}>
+      {index > 0 ? <span className="spec">[AI推测]</span> : null}
+      {part}
+    </span>
+  ));
+  for (const mark of props.marks ?? []) {
+    if (mark.type === "bold") body = <strong>{body}</strong>;
+    else if (mark.type === "italic") body = <em>{body}</em>;
+    else if (mark.type === "strike") body = <s>{body}</s>;
+    else if (mark.type === "code") body = <code>{body}</code>;
+    else if (mark.type === "highlight") {
+      body = <mark style={{ background: String(mark.attrs?.color ?? "#f4d35e") }}>{body}</mark>;
+    }
+  }
+  return <>{body}</>;
 }

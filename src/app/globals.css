@@ -463,6 +463,7 @@ button {
 }
 
 .workspace {
+  --topbar-height: 59px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -567,13 +568,19 @@ button {
   flex-wrap: wrap;
   gap: 4px 8px;
   margin: 0 0 16px;
-  padding: 0 0 12px;
+  padding: 8px 4px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--paper-ink, #2c241b) 10%, transparent);
   position: sticky;
-  top: 0;
-  z-index: 12;
-  background: color-mix(in srgb, var(--paper-bg, #fffdf8) 92%, transparent);
-  backdrop-filter: blur(8px);
+  top: var(--topbar-height, 59px);
+  z-index: 16;
+  background: var(--paper-bg, #fffdf8);
+}
+.notes-toolbar.is-stuck {
+  margin-left: -20px;
+  margin-right: -20px;
+  padding-left: 20px;
+  padding-right: 20px;
+  box-shadow: 0 10px 18px -14px rgba(44, 36, 27, 0.45);
 }
 .notes-toolbar-group {
   display: flex;
@@ -864,13 +871,28 @@ button {
   color: color-mix(in srgb, var(--paper-ink) 80%, transparent);
 }
 .ProseMirror pre {
-  background: color-mix(in srgb, var(--paper-ink) 8%, transparent);
+  position: relative;
+  background: #f4efe6;
+  border: 1px solid rgba(44, 36, 27, 0.14);
   padding: 14px 16px;
   overflow: auto;
   font-size: 0.86em;
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 .ProseMirror code { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.ProseMirror :not(pre) > code {
+  background: rgba(44, 36, 27, 0.08);
+  border-radius: 4px;
+  padding: 0.08em 0.35em;
+  font-size: 0.92em;
+}
+.ProseMirror mark {
+  border-radius: 4px;
+  padding: 0 0.18em;
+  color: inherit;
+  box-decoration-break: clone;
+}
 .ProseMirror hr { border: 0; border-top: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); margin: 2em 0; }
 .ProseMirror img {
   display: block;
@@ -1339,6 +1361,97 @@ button {
   white-space: pre-wrap;
   line-height: 1.75;
   font-size: 15px;
+}
+.sheet-images {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+  overflow: auto;
+}
+.sheet-images img {
+  width: 84px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(44, 36, 27, 0.08);
+}
+.sheet-rich {
+  line-height: 1.75;
+  font-size: 15px;
+}
+.sheet-rich h3,
+.sheet-rich h4 {
+  margin: 1.1em 0 0.4em;
+  font-family: Palatino, "Iowan Old Style", serif;
+}
+.sheet-rich h3 { font-size: 1.25em; }
+.sheet-rich h4 { font-size: 1.08em; }
+.sheet-rich p { margin: 0.45em 0; }
+.sheet-rich ul,
+.sheet-rich ol { margin: 0.4em 0 0.8em; padding-left: 1.3em; }
+.sheet-rich blockquote {
+  margin: 0.8em 0;
+  padding-left: 0.9em;
+  border-left: 2px solid var(--accent);
+  color: #5c534b;
+}
+.sheet-rich pre {
+  position: relative;
+  margin: 0.8em 0;
+  padding: 12px 14px;
+  overflow: auto;
+  background: #f4efe6;
+  border: 1px solid rgba(44, 36, 27, 0.14);
+  border-radius: 12px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.sheet-rich pre:has(.code-lang) {
+  padding-top: 28px;
+}
+.sheet-rich .code-lang {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-family: "Avenir Next", "PingFang SC", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8a8178;
+}
+.sheet-rich code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  background: rgba(44, 36, 27, 0.08);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+.sheet-rich pre code {
+  background: transparent;
+  padding: 0;
+}
+.sheet-rich mark {
+  border-radius: 4px;
+  padding: 0 0.18em;
+  color: inherit;
+}
+.sheet-rich img {
+  display: block;
+  max-width: min(100%, 420px);
+  margin: 10px 0;
+  border-radius: 6px;
+}
+.sheet-rich table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+.sheet-rich th,
+.sheet-rich td {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid rgba(44, 36, 27, 0.12);
+  text-align: left;
+  vertical-align: top;
 }
 .sheet-wait {
   color: var(--desk-muted);

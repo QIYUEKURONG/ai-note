@@ -20,7 +20,7 @@ import { InterviewPanel } from "@/features/interview/InterviewPanel";
 import { SettingsPanel } from "@/features/settings/SettingsPanel";
 import { AiDock, type DockAction } from "@/features/dock/AiDock";
 import { api } from "@/lib/client";
-import { parseDocument } from "@/lib/document";
+import { collectImages, parseDocument } from "@/lib/document";
 import { replaceQuote } from "@/lib/review-doc";
 import { themeToCssVars, type NoteTheme } from "@/domain/themes";
 import type { OrganizeKind } from "@/domain/organize-kinds";
@@ -92,31 +92,46 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
   const [selectionText, setSelectionText] = useState("");
   const [aiScope, setAiScope] = useState("");
   const [scopeNotice, setScopeNotice] = useState("");
+  const [loadError, setLoadError] = useState("");
   const saveTimer = useRef<number | null>(null);
+  const loadGen = useRef(0);
   const appearanceRef = useRef<HTMLDivElement>(null);
   const checkEntry = useRef<string | null>(null);
   const interviewBooted = useRef(false);
 
   const load = useCallback(async () => {
-    try {
-      const payload = await api<WorkspacePayload>(`/api/notes/${props.noteId}`);
-      setData(payload);
-      setTitle(payload.note.title);
-      setTheme({
-        preset: payload.note.settings.preset as NoteTheme["preset"],
-        background: payload.note.settings.background,
-        fontFamily: payload.note.settings.fontFamily,
-        fontSize: payload.note.settings.fontSize,
-        textColor: payload.note.settings.textColor,
-        accentColor: payload.note.settings.accentColor,
-        codeTheme: payload.note.settings.codeTheme,
-        lineHeight: payload.note.settings.lineHeight,
-        pageWidth: payload.note.settings.pageWidth,
-        customColorsJson: payload.note.settings.customColorsJson,
-      });
-    } catch (error) {
-      console.error(error);
+    const gen = loadGen.current + 1;
+    loadGen.current = gen;
+    setLoadError("");
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const payload = await api<WorkspacePayload>(`/api/notes/${props.noteId}`);
+        if (loadGen.current !== gen) return;
+        setData(payload);
+        setTitle(payload.note.title);
+        setTheme({
+          preset: payload.note.settings.preset as NoteTheme["preset"],
+          background: payload.note.settings.background,
+          fontFamily: payload.note.settings.fontFamily,
+          fontSize: payload.note.settings.fontSize,
+          textColor: payload.note.settings.textColor,
+          accentColor: payload.note.settings.accentColor,
+          codeTheme: payload.note.settings.codeTheme,
+          lineHeight: payload.note.settings.lineHeight,
+          pageWidth: payload.note.settings.pageWidth,
+          customColorsJson: payload.note.settings.customColorsJson,
+        });
+        setLoadError("");
+        return;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
+        if (loadGen.current !== gen) return;
+      }
     }
+    if (loadGen.current !== gen) return;
+    setLoadError(lastError instanceof Error ? lastError.message : "这篇笔记没有打开");
   }, [props.noteId]);
 
   useEffect(() => {
@@ -228,6 +243,10 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
     [reviewResult],
   );
   const organizeResults = data?.results.filter((item) => item.kind !== "annotation") ?? [];
+  const inlineImages = useMemo(
+    () => collectImages(parseDocument(data?.note.contentJson ?? "")),
+    [data?.note.contentJson],
+  );
   const vars = useMemo(() => (theme ? themeToCssVars(theme) : {}), [theme]);
   const taskRunning = task?.status === "pending" || task?.status === "running";
 
@@ -306,7 +325,21 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
   }
 
   if (!data || !theme) {
-    return <div className="home">打开纸张…</div>;
+    return (
+      <div className="home">
+        {loadError ? (
+          <div className="browser-empty">
+            <h1>这篇笔记没有打开</h1>
+            <p>{loadError}</p>
+            <button type="button" className="btn" onClick={() => void load()}>
+              再试一次
+            </button>
+          </div>
+        ) : (
+          "打开纸张…"
+        )}
+      </div>
+    );
   }
 
   const paper = (
@@ -491,6 +524,7 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
             source={aiScope || data.note.contentText}
             scoped={Boolean(aiScope)}
             notice={scopeNotice}
+            images={aiScope ? [] : inlineImages}
             kind={kind}
             running={Boolean(taskRunning && task?.type === "generate_summary")}
             results={organizeResults}

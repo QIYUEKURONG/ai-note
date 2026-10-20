@@ -136,6 +136,96 @@ function isPipeRow(line: string): boolean {
   return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.length > 2;
 }
 
+type InlineMark = { type: string; attrs?: Record<string, unknown> };
+
+const INLINE_MARKS: Array<{ open: string; close: string; mark: InlineMark }> = [
+  { open: "**", close: "**", mark: { type: "bold" } },
+  { open: "==", close: "==", mark: { type: "highlight", attrs: { color: HIGHLIGHT_COLORS.yellow } } },
+  { open: "~~", close: "~~", mark: { type: "strike" } },
+  { open: "`", close: "`", mark: { type: "code" } },
+  { open: "*", close: "*", mark: { type: "italic" } },
+];
+
+/** `==词==`、`**粗体**`、`` `代码` `` become real marks. Image markers stay as slots. */
+export function inlineNodes(text: string): TipTapNode[] {
+  const nodes: TipTapNode[] = [];
+  let buffer = "";
+  const pushText = () => {
+    if (!buffer) return;
+    nodes.push({ type: "text", text: buffer });
+    buffer = "";
+  };
+  for (let index = 0; index < text.length; ) {
+    const rest = text.slice(index);
+    const marker = /^\[\[图(\d+)\]\]/.exec(rest);
+    if (marker) {
+      pushText();
+      nodes.push({ type: "imageSlot", attrs: { index: Number(marker[1]) } });
+      index += marker[0].length;
+      continue;
+    }
+    const picture = /^!\[([^\]]*)\]\(([^)\s]+)\)/.exec(rest);
+    if (picture) {
+      pushText();
+      nodes.push({ type: "image", attrs: { src: picture[2], alt: picture[1] || null } });
+      index += picture[0].length;
+      continue;
+    }
+    let matched = false;
+    for (const spec of INLINE_MARKS) {
+      if (!rest.startsWith(spec.open)) continue;
+      const innerStart = spec.open.length;
+      const end = rest.indexOf(spec.close, innerStart);
+      if (end <= innerStart) continue;
+      const inner = rest.slice(innerStart, end);
+      if (!inner.trim() || inner.includes("\n")) continue;
+      pushText();
+      nodes.push({ type: "text", text: inner, marks: [spec.mark] });
+      index += end + spec.close.length;
+      matched = true;
+      break;
+    }
+    if (matched) continue;
+    buffer += text[index];
+    index += 1;
+  }
+  pushText();
+  return nodes;
+}
+
+function inlineText(text: string): TipTapNode[] {
+  return inlineNodes(text).filter((node) => node.type === "text");
+}
+
+function blocksFromLines(lines: string[]): TipTapNode[] {
+  const nodes: TipTapNode[] = [];
+  let inline: TipTapNode[] = [];
+  const flush = () => {
+    if (!inline.length) return;
+    nodes.push({ type: "paragraph", content: inline });
+    inline = [];
+  };
+  lines.forEach((line, lineIndex) => {
+    const parts = inlineNodes(line);
+    if (lineIndex > 0 && inline.length) inline.push({ type: "hardBreak" });
+    for (const part of parts) {
+      if (part.type === "image" || part.type === "imageSlot") {
+        flush();
+        nodes.push(part);
+      } else {
+        inline.push(part);
+      }
+    }
+  });
+  flush();
+  return nodes.length ? nodes : [{ type: "paragraph" }];
+}
+
+function paragraphFromText(text: string): TipTapNode {
+  const content = inlineText(text);
+  return content.length ? { type: "paragraph", content } : { type: "paragraph" };
+}
+
 /** Pipe rows in a proportional font never line up. A real table does. */
 export function markdownTableNode(source: string): TipTapNode | null {
   const lines = source
@@ -157,11 +247,7 @@ export function markdownTableNode(source: string): TipTapNode | null {
       const text = cells[column] ?? "";
       rowCells.push({
         type: header ? "tableHeader" : "tableCell",
-        content: [
-          text
-            ? { type: "paragraph", content: [{ type: "text", text }] }
-            : { type: "paragraph" },
-        ],
+        content: [paragraphFromText(text)],
       });
     }
     rows.push({ type: "tableRow", content: rowCells });
@@ -207,6 +293,227 @@ export function liftMarkdownTables(doc: TipTapDoc): TipTapDoc {
   return { ...doc, content: (doc.content ?? []).map(liftNode) };
 }
 
+export function collectImages(doc: TipTapDoc | TipTapNode): TipTapNode[] {
+  const images: TipTapNode[] = [];
+  const walk = (node: TipTapNode) => {
+    if (node.type === "image" && keepStoredImage(node)) {
+      images.push({ type: "image", attrs: { ...node.attrs } });
+      return;
+    }
+    node.content?.forEach(walk);
+  };
+  walk(doc);
+  return images;
+}
+
+/** Plain text for the organizer, with [[图1]] standing in for each stored picture. */
+export function noteSourceForOrganize(doc: TipTapDoc): string {
+  const parts: string[] = [];
+  let count = 0;
+  const walk = (node: TipTapNode) => {
+    if (node.type === "image" && keepStoredImage(node)) {
+      count += 1;
+      parts.push(`[[图${count}]]\n`);
+      return;
+    }
+    if (node.text) parts.push(node.text);
+    if (!node.content) return;
+    for (const child of node.content) walk(child);
+    if (
+      node.type === "paragraph" ||
+      node.type === "heading" ||
+      node.type === "blockquote" ||
+      node.type === "listItem" ||
+      node.type === "codeBlock" ||
+      node.type === "horizontalRule"
+    ) {
+      parts.push("\n");
+    }
+  };
+  walk(doc);
+  return parts.join("").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function realizeImages(nodes: TipTapNode[], images: TipTapNode[]): TipTapNode[] {
+  const used = new Set<number>();
+  const take = (index: number): TipTapNode | null => {
+    if (index < 0 || index >= images.length || used.has(index)) return null;
+    used.add(index);
+    return { type: "image", attrs: { ...images[index].attrs } };
+  };
+  const walk = (node: TipTapNode): TipTapNode[] => {
+    if (node.type === "imageSlot") {
+      const image = take(Number(node.attrs?.index) - 1);
+      return image ? [image] : [];
+    }
+    if (node.type === "image") {
+      const src = String(node.attrs?.src ?? "");
+      const index = images.findIndex(
+        (item, itemIndex) => !used.has(itemIndex) && String(item.attrs?.src ?? "") === src,
+      );
+      if (index >= 0) used.add(index);
+      if (!keepStoredImage(node)) return [];
+      return [{ type: "image", attrs: { ...node.attrs } }];
+    }
+    if (!node.content) return [node];
+    const content = node.content.flatMap(walk);
+    if (node.type !== "paragraph" && node.type !== "heading") {
+      return [{ ...node, content }];
+    }
+    const lifted: TipTapNode[] = [];
+    let inline: TipTapNode[] = [];
+    const flushInline = () => {
+      if (!inline.length) return;
+      lifted.push({ ...node, content: inline });
+      inline = [];
+    };
+    for (const child of content) {
+      if (child.type === "image") {
+        flushInline();
+        lifted.push(child);
+      } else {
+        inline.push(child);
+      }
+    }
+    flushInline();
+    return lifted;
+  };
+  const next = nodes.flatMap(walk);
+  images.forEach((image, index) => {
+    if (!used.has(index)) next.push({ type: "image", attrs: { ...image.attrs } });
+  });
+  return next;
+}
+
+export function markdownToNodes(markdown: string): TipTapNode[] {
+  const lines = markdown.split("\n");
+  const nodes: TipTapNode[] = [];
+  let paragraph: string[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  let quote: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    nodes.push(...blocksFromLines(paragraph));
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    nodes.push({
+      type: list.ordered ? "orderedList" : "bulletList",
+      content: list.items.map((item) => ({
+        type: "listItem",
+        content: blocksFromLines([item]),
+      })),
+    });
+    list = null;
+  };
+  const flushQuote = () => {
+    if (!quote.length) return;
+    nodes.push({
+      type: "blockquote",
+      content: quote.map((line) => paragraphFromText(line)),
+    });
+    quote = [];
+  };
+  const flushFlow = () => {
+    flushParagraph();
+    flushList();
+    flushQuote();
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed.startsWith("```")) {
+      flushFlow();
+      const language = trimmed.slice(3).trim();
+      const body: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith("```")) {
+        body.push(lines[index]);
+        index += 1;
+      }
+      const text = body.join("\n").replace(/\s+$/, "");
+      nodes.push({
+        type: "codeBlock",
+        attrs: { language: language || null },
+        content: text ? [{ type: "text", text }] : [],
+      });
+      continue;
+    }
+    if (!trimmed) {
+      flushFlow();
+      continue;
+    }
+    const table = takeMarkdownTable(lines, index);
+    if (table) {
+      flushFlow();
+      nodes.push(table.table);
+      index = table.next - 1;
+      continue;
+    }
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      flushFlow();
+      nodes.push({ type: "horizontalRule" });
+      continue;
+    }
+    const ownLine = /^(?:\[\[图\d+\]\]|!\[[^\]]*\]\([^)\s]+\))$/.test(trimmed)
+      ? blocksFromLines([trimmed])
+      : null;
+    if (ownLine?.length === 1 && (ownLine[0].type === "image" || ownLine[0].type === "imageSlot")) {
+      flushFlow();
+      nodes.push(ownLine[0]);
+      continue;
+    }
+    const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed);
+    if (heading) {
+      flushFlow();
+      const level = heading[1].length === 1 ? 2 : 3;
+      const content = inlineText(heading[2]);
+      nodes.push({
+        type: "heading",
+        attrs: { level },
+        content: content.length ? content : [],
+      });
+      continue;
+    }
+    const bullet = /^(?:[-*]|•)\s+(.+)$/.exec(trimmed);
+    if (bullet) {
+      flushParagraph();
+      flushQuote();
+      if (!list || list.ordered) {
+        flushList();
+        list = { ordered: false, items: [] };
+      }
+      list.items.push(bullet[1]);
+      continue;
+    }
+    const ordered = /^\d+\.\s+(.+)$/.exec(trimmed);
+    if (ordered) {
+      flushParagraph();
+      flushQuote();
+      if (!list || !list.ordered) {
+        flushList();
+        list = { ordered: true, items: [] };
+      }
+      list.items.push(ordered[1]);
+      continue;
+    }
+    const quoted = /^>\s?(.*)$/.exec(trimmed);
+    if (quoted) {
+      flushParagraph();
+      flushList();
+      quote.push(quoted[1]);
+      continue;
+    }
+    flushList();
+    flushQuote();
+    paragraph.push(trimmed);
+  }
+  flushFlow();
+  return nodes;
+}
+
 export function appendMarkdownBlocks(doc: TipTapDoc, markdown: string, heading: string): TipTapDoc {
   const content = [...(doc.content ?? [])];
   content.push({ type: "horizontalRule" });
@@ -215,37 +522,7 @@ export function appendMarkdownBlocks(doc: TipTapDoc, markdown: string, heading: 
     attrs: { level: 2 },
     content: [{ type: "text", text: heading }],
   });
-  const lines = markdown.split("\n");
-  let buffer: string[] = [];
-  const flush = () => {
-    const text = buffer.join("\n").trim();
-    buffer = [];
-    if (!text) return;
-    content.push({
-      type: "paragraph",
-      content: [{ type: "text", text }],
-    });
-  };
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (line.startsWith("```")) {
-      flush();
-      continue;
-    }
-    if (line.trim() === "") {
-      flush();
-      continue;
-    }
-    const table = takeMarkdownTable(lines, index);
-    if (table) {
-      flush();
-      content.push(table.table);
-      index = table.next - 1;
-      continue;
-    }
-    buffer.push(line.replace(/^#{1,6}\s*/, "").replace(/^[-*]\s+/, "• "));
-  }
-  flush();
+  content.push(...markdownToNodes(markdown));
   return { type: "doc", content };
 }
 
@@ -254,52 +531,20 @@ export function replaceDocumentFromMarkdown(markdown: string, title: string): Ti
   return appendMarkdownBlocks({ type: "doc", content: base.content?.slice(0, 1) }, markdown, "正文");
 }
 
-export function documentFromOrganizedMarkdown(markdown: string, title: string): TipTapDoc {
-  const content: TipTapNode[] = [
-    {
-      type: "heading",
-      attrs: { level: 1 },
-      content: title ? [{ type: "text", text: title }] : [],
-    },
-  ];
-  let buffer: string[] = [];
-  const flush = () => {
-    const text = buffer.join("\n").trim();
-    buffer = [];
-    if (!text) return;
-    content.push({ type: "paragraph", content: [{ type: "text", text }] });
-  };
-  const lines = markdown.split("\n");
-  for (let index = 0; index < lines.length; index += 1) {
-    const trimmed = lines[index].trim();
-    if (trimmed.startsWith("```")) {
-      flush();
-      continue;
-    }
-    if (!trimmed) {
-      flush();
-      continue;
-    }
-    const table = takeMarkdownTable(lines, index);
-    if (table) {
-      flush();
-      content.push(table.table);
-      index = table.next - 1;
-      continue;
-    }
-    const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed);
-    if (heading) {
-      flush();
-      const level = heading[1].length === 1 ? 2 : heading[1].length === 2 ? 3 : 3;
-      content.push({
+export function documentFromOrganizedMarkdown(
+  markdown: string,
+  title: string,
+  images: TipTapNode[] = [],
+): TipTapDoc {
+  return {
+    type: "doc",
+    content: [
+      {
         type: "heading",
-        attrs: { level },
-        content: [{ type: "text", text: heading[2] }],
-      });
-      continue;
-    }
-    buffer.push(trimmed.replace(/^[-*]\s+/, "• "));
-  }
-  flush();
-  return { type: "doc", content };
+        attrs: { level: 1 },
+        content: title ? [{ type: "text", text: title }] : [],
+      },
+      ...realizeImages(markdownToNodes(markdown), images),
+    ],
+  };
 }

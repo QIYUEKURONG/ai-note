@@ -1,5 +1,6 @@
 import {
   appendMarkdownBlocks,
+  collectImages,
   documentFromOrganizedMarkdown,
   parseDocument,
   replaceDocumentFromMarkdown,
@@ -53,7 +54,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
     contentJson = JSON.stringify(doc);
   }
   if (body.applyMarkdown) {
-    const doc = documentFromOrganizedMarkdown(body.applyMarkdown, body.title ?? existing.title);
+    const previous = parseDocument(existing.contentJson);
+    const doc = documentFromOrganizedMarkdown(
+      body.applyMarkdown,
+      body.title ?? existing.title,
+      collectImages(previous),
+    );
     contentJson = JSON.stringify(doc);
   }
   const note = updateNote(id, {

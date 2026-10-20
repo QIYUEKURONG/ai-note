@@ -1,5 +1,8 @@
 export const ORGANIZE_KINDS = [
   { id: "markdown", label: "Markdown 整理" },
+  { id: "study_note", label: "学习笔记" },
+  { id: "code_box", label: "代码成框" },
+  { id: "key_terms", label: "重点标记" },
   { id: "one_sentence", label: "一句话总结" },
   { id: "three_sentences", label: "三句话总结" },
   { id: "tldr", label: "TL;DR" },

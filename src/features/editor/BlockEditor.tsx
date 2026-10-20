@@ -186,6 +186,16 @@ const persistImages = Extension.create({
   },
 });
 
+function scrollingParent(node: HTMLElement | null): HTMLElement | null {
+  let current = node?.parentElement ?? null;
+  while (current) {
+    const overflow = getComputedStyle(current).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
 export function plainSelection(state: EditorState): string {
   const { from, to, empty } = state.selection;
   if (empty) return "";
@@ -208,6 +218,8 @@ export function BlockEditor(props: {
 }) {
   const [styleOpen, setStyleOpen] = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
+  const [toolbarStuck, setToolbarStuck] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const styleRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<EditorReview | null>(props.review ?? null);
@@ -288,6 +300,29 @@ export function BlockEditor(props: {
   }, [editor, reviewSignature]);
 
   useEffect(() => {
+    const node = toolbarRef.current;
+    const scroller = scrollingParent(node);
+    if (!node || !scroller) return;
+    const onScroll = () => {
+      const bar = toolbarRef.current;
+      if (!bar) return;
+      const topbar = scroller.querySelector(":scope > .topbar, .topbar");
+      const offset = topbar instanceof HTMLElement ? topbar.getBoundingClientRect().height : 0;
+      bar.style.top = `${offset}px`;
+      const rect = bar.getBoundingClientRect();
+      const box = scroller.getBoundingClientRect();
+      setToolbarStuck(rect.top <= box.top + offset + 2);
+    };
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [editor]);
+
+  useEffect(() => {
     function onDocClick(event: MouseEvent) {
       const target = event.target as Node;
       if (styleRef.current && !styleRef.current.contains(target)) setStyleOpen(false);
@@ -340,7 +375,7 @@ export function BlockEditor(props: {
 
   return (
     <>
-      <div className="notes-toolbar">
+      <div ref={toolbarRef} className={toolbarStuck ? "notes-toolbar is-stuck" : "notes-toolbar"}>
         <div className="notes-toolbar-scroll">
           <div className="tb-dropdown" ref={styleRef}>
             <button
