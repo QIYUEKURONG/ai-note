@@ -24,25 +24,36 @@ export default function DesktopPetPage() {
 
   useEffect(() => {
     tell(menu ? "size:392,320" : "size:146,136");
+    tell(menu ? "show" : "rest");
   }, [menu]);
 
-  function onPetPointerDown(event: React.PointerEvent) {
+  useEffect(() => {
+    if (companion.reminder) setMenu(true);
+  }, [companion.reminder?.id]);
+
+  function onPetPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
     const startX = event.screenX;
     const startY = event.screenY;
+    const target = event.currentTarget;
     moved.current = false;
-    tell("drag-start");
+    target.setPointerCapture(event.pointerId);
     function onMove(next: PointerEvent) {
       const dx = next.screenX - startX;
       const dy = next.screenY - startY;
-      if (Math.hypot(dx, dy) > 4) moved.current = true;
-      if (moved.current) tell(`move:${Math.round(dx)},${Math.round(dy)}`);
+      if (Math.hypot(dx, dy) <= 4) return;
+      if (!moved.current) {
+        moved.current = true;
+        tell("drag-start");
+      }
+      tell(`move:${Math.round(dx)},${Math.round(dy)}`);
+    }
+    function onUp(next: PointerEvent) {
+      window.removeEventListener("pointermove", onMove);
+      if (target.hasPointerCapture(next.pointerId)) target.releasePointerCapture(next.pointerId);
+      if (!moved.current) setMenu((open) => !open);
     }
     window.addEventListener("pointermove", onMove);
-    window.addEventListener(
-      "pointerup",
-      () => window.removeEventListener("pointermove", onMove),
-      { once: true },
-    );
+    window.addEventListener("pointerup", onUp, { once: true });
   }
 
   const noteId = companion.reminder?.noteId || companion.question?.noteId || companion.space?.notes[0]?.id || "";
@@ -72,9 +83,6 @@ export default function DesktopPetPage() {
         className="desktop-pet-hit"
         aria-label="伙伴"
         onPointerDown={onPetPointerDown}
-        onClick={() => {
-          if (!moved.current) setMenu((open) => !open);
-        }}
       >
         <PetFigure mood={companion.mood} kind={kind} />
       </button>

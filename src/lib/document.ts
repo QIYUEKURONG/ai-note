@@ -548,3 +548,137 @@ export function documentFromOrganizedMarkdown(
     ],
   };
 }
+
+function isTextNode(node: TipTapNode): boolean {
+  return node.type === "text" || (typeof node.text === "string" && !node.content?.length);
+}
+
+function flattenText(node: TipTapNode): string {
+  if (isTextNode(node)) return node.text ?? "";
+  return (node.content ?? []).map(flattenText).join("");
+}
+
+function organizedBlocks(markdown: string): TipTapNode[] {
+  return documentFromOrganizedMarkdown(markdown, "").content?.slice(1) ?? [];
+}
+
+function isVacantContent(type: string, content: TipTapNode[]): boolean {
+  if (type === "paragraph" || type === "heading" || type === "codeBlock") {
+    return content.every(
+      (child) => child.type === "hardBreak" || (child.type === "text" && !child.text) || isVacantNode(child),
+    );
+  }
+  if (type === "listItem" || type === "bulletList" || type === "orderedList" || type === "blockquote") {
+    return content.length === 0 || content.every(isVacantNode);
+  }
+  return false;
+}
+
+function isVacantNode(node: TipTapNode): boolean {
+  if (node.type === "text") return !node.text;
+  if (!node.content) return false;
+  return isVacantContent(node.type, node.content);
+}
+
+function ensureListItem(content: TipTapNode[]): TipTapNode[] {
+  if (!content.length || content[0]?.type === "paragraph") return content;
+  return [{ type: "paragraph" }, ...content];
+}
+
+/** Pull parsed Markdown blocks out of inline parents so they become real editor blocks. */
+function liftInserted(node: TipTapNode, inner: TipTapNode[], inserted: WeakSet<TipTapNode>): TipTapNode[] {
+  if (node.type === "tableCell" || node.type === "tableHeader") {
+    const content = inner.filter((child) => !isVacantNode(child));
+    return [{ ...node, content: content.length ? content : [{ type: "paragraph" }] }];
+  }
+  const out: TipTapNode[] = [];
+  let bucket: TipTapNode[] = [];
+  const flush = () => {
+    if (!bucket.length) return;
+    const content = bucket;
+    bucket = [];
+    if (isVacantContent(node.type, content)) return;
+    const nextContent = node.type === "listItem" ? ensureListItem(content) : content;
+    if (!nextContent.length) return;
+    out.push({ ...node, content: nextContent });
+  };
+  for (const child of inner) {
+    if (inserted.has(child)) {
+      flush();
+      out.push(child);
+    } else if (!isVacantNode(child)) {
+      bucket.push(child);
+    }
+  }
+  flush();
+  return out;
+}
+
+function rewriteNodes(
+  nodes: TipTapNode[],
+  rangeStart: number,
+  rangeEnd: number,
+  state: { cursor: number; placed: boolean },
+  blocks: TipTapNode[],
+  inserted: WeakSet<TipTapNode>,
+): TipTapNode[] {
+  const out: TipTapNode[] = [];
+  for (const node of nodes) {
+    if (isTextNode(node)) {
+      const text = node.text ?? "";
+      const start = state.cursor;
+      const end = start + text.length;
+      state.cursor = end;
+      const overlapStart = Math.max(rangeStart, start);
+      const overlapEnd = Math.min(rangeEnd, end);
+      if (overlapStart >= overlapEnd) {
+        if (text) out.push(node);
+        continue;
+      }
+      const before = text.slice(0, overlapStart - start);
+      const after = text.slice(overlapEnd - start);
+      if (before) out.push({ ...node, text: before });
+      if (!state.placed) {
+        out.push(...blocks);
+        state.placed = true;
+      }
+      if (after) out.push({ ...node, text: after });
+      continue;
+    }
+
+    const start = state.cursor;
+    if (!node.content?.length) {
+      const inside = state.cursor > rangeStart && state.cursor < rangeEnd;
+      if (!(inside && (node.type === "paragraph" || node.type === "heading"))) out.push(node);
+      continue;
+    }
+
+    const inner = rewriteNodes(node.content, rangeStart, rangeEnd, state, blocks, inserted);
+    const overlaps = start < rangeEnd && state.cursor > rangeStart;
+    if (!overlaps) {
+      out.push(node);
+      continue;
+    }
+    out.push(...liftInserted(node, inner, inserted));
+  }
+  return out;
+}
+
+/**
+ * Replace a selected passage with organized Markdown.
+ * The preview parses that Markdown into headings, lists, and code blocks.
+ * Writing it back as a plain string leaves the `#` and fences visible in the editor.
+ */
+export function replaceScopeWithMarkdown(doc: TipTapDoc, quote: string, markdown: string): TipTapDoc | null {
+  const needle = quote.trim();
+  const blocks = organizedBlocks(markdown.trim());
+  if (!needle || !blocks.length) return null;
+  const clone = structuredClone(doc) as TipTapDoc;
+  const index = flattenText(clone).indexOf(needle);
+  if (index < 0) return null;
+  const inserted = new WeakSet<TipTapNode>(blocks);
+  const state = { cursor: 0, placed: false };
+  const content = rewriteNodes(clone.content ?? [], index, index + needle.length, state, blocks, inserted);
+  if (!state.placed) return null;
+  return { type: "doc", content };
+}

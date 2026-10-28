@@ -20,7 +20,7 @@ import { InterviewPanel } from "@/features/interview/InterviewPanel";
 import { SettingsPanel } from "@/features/settings/SettingsPanel";
 import { AiDock, type DockAction } from "@/features/dock/AiDock";
 import { api } from "@/lib/client";
-import { collectImages, parseDocument } from "@/lib/document";
+import { collectImages, parseDocument, replaceScopeWithMarkdown } from "@/lib/document";
 import { replaceQuote } from "@/lib/review-doc";
 import { themeToCssVars, type NoteTheme } from "@/domain/themes";
 import type { OrganizeKind } from "@/domain/organize-kinds";
@@ -543,7 +543,7 @@ export function NoteWorkspace(props: { noteId: string; initialMode?: "check" | "
             }
             onApply={async (result) => {
               if (aiScope) {
-                const next = replaceQuote(parseDocument(data.note.contentJson), aiScope, result.body);
+                const next = replaceScopeWithMarkdown(parseDocument(data.note.contentJson), aiScope, result.body);
                 if (!next) {
                   setScopeNotice("没能在正文里定位这段选中文字，原文没有改动。");
                   return;

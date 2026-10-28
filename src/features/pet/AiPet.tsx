@@ -18,6 +18,14 @@ export function AiPet() {
   const { reminder, question } = companion;
 
   useEffect(() => {
+    void api<{ running: boolean }>("/api/pet/desktop")
+      .then((res) => {
+        if (res.running) setOnDesktop(true);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (reminder && !onDesktop) setOpen(true);
   }, [reminder?.id, onDesktop]);
 

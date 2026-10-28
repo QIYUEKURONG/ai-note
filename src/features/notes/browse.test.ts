@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterNotes, groupNotesByTime, matchesQuery, orderNotesByRecent } from "./browse";
+import { filterNotes, groupNotesByTime, matchSnippet, matchesQuery, orderNotesByRecent } from "./browse";
 import type { NoteRow } from "@/db/schema";
 
 function note(partial: Partial<NoteRow> & Pick<NoteRow, "id" | "title">): NoteRow {
@@ -20,6 +20,14 @@ describe("browse notes", () => {
     const item = note({ id: "1", title: "Kafka", contentText: "ISR 集合" });
     expect(matchesQuery(item, "isr")).toBe(true);
     expect(matchesQuery(item, "zoo")).toBe(false);
+  });
+
+  it("shows the sentence around a body hit", () => {
+    const snippet = matchSnippet("前面有很长的铺垫。这里写着 ISR 集合，后面还继续。", "isr");
+    expect(snippet?.match.toLowerCase()).toBe("isr");
+    expect(snippet?.before.endsWith("写着 ")).toBe(true);
+    expect(snippet?.after.startsWith(" 集合")).toBe(true);
+    expect(matchSnippet("没有这个词", "zoo")).toBeNull();
   });
 
   it("filters favorites and groups by day", () => {

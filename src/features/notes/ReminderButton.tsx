@@ -3,22 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { api, touchSpace } from "@/lib/client";
 
-function localStamp(offsetMs: number): string {
-  const date = new Date(Date.now() + offsetMs);
+function localStamp(): string {
+  const date = new Date();
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function ReminderButton(props: { noteId: string; title: string }) {
   const [open, setOpen] = useState(false);
-  const [when, setWhen] = useState("");
+  const [when, setWhen] = useState(localStamp);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setWhen(localStamp(60 * 60 * 1000));
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -36,6 +32,8 @@ export function ReminderButton(props: { noteId: string; title: string }) {
         className={`text-btn ${open ? "is-on" : ""}`}
         onClick={() => {
           setSaved(false);
+          setError("");
+          setWhen(localStamp());
           setOpen((value) => !value);
         }}
       >

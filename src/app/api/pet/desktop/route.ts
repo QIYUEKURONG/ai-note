@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -28,12 +28,24 @@ async function ensureBinary() {
 }
 
 function stopExisting() {
-  const pid = runningPid();
-  if (!pid) return;
+  const pids = new Set<number>();
+  const recorded = runningPid();
+  if (recorded) pids.add(recorded);
   try {
-    process.kill(pid, "SIGTERM");
+    const listed = execFileSync("pgrep", ["-f", "desktop-pet"], { encoding: "utf8" });
+    for (const line of listed.split("\n")) {
+      const pid = Number(line);
+      if (Number.isFinite(pid) && pid > 0) pids.add(pid);
+    }
   } catch {
-    return;
+    // pgrep exits with status 1 when nothing matches.
+  }
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Already gone.
+    }
   }
 }
 
@@ -41,7 +53,13 @@ export async function GET() {
   return json({ running: Boolean(runningPid()) });
 }
 
-export async function POST() {
+function serverPort(request: Request): string {
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  const port = host.slice(host.lastIndexOf(":") + 1);
+  return /^\d+$/.test(port) ? port : "3001";
+}
+
+export async function POST(request: Request) {
   stopExisting();
   try {
     await ensureBinary();
@@ -50,7 +68,7 @@ export async function POST() {
     return json({ error: message }, 500);
   }
   await new Promise((resolve) => setTimeout(resolve, 250));
-  const child = spawn(binary, [], { detached: true, stdio: "ignore" });
+  const child = spawn(binary, [serverPort(request)], { detached: true, stdio: "ignore" });
   child.unref();
   if (!child.pid) return json({ error: "桌面窗口没有打开" }, 500);
   fs.mkdirSync(path.dirname(pidFile), { recursive: true });

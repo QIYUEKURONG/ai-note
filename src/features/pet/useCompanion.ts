@@ -20,7 +20,7 @@ export function useCompanion() {
 
   useEffect(() => {
     void load().catch(() => undefined);
-    const timer = window.setInterval(() => void load().catch(() => undefined), 20000);
+    const timer = window.setInterval(() => void load().catch(() => undefined), 5000);
     function onTouch() {
       void load().catch(() => undefined);
     }

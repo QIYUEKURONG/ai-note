@@ -88,6 +88,7 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     private var startedServer = false
     private let session = URLSession(configuration: .ephemeral)
     private var port = 3001
+    private var launchError = "本地服务没有起来。日志在项目里的 data/mindbook-app.log"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
@@ -107,7 +108,7 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
                 if ready {
                     self.attachWeb(to: window, path: "/")
                 } else {
-                    self.showStatus("本地服务没有起来。日志在项目里的 data/mindbook-app.log", on: window)
+                    self.showStatus(self.launchError, on: window)
                 }
             }
         }
@@ -286,6 +287,10 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func productionBuildExists() -> Bool {
+        FileManager.default.fileExists(atPath: projectRoot() + "/.next/required-server-files.json")
+    }
+
     private func mindBookPort(_ candidate: Int) -> Bool {
         guard let url = URL(string: "http://127.0.0.1:\(candidate)/api/notes") else { return false }
         var request = URLRequest(url: url, timeoutInterval: 1.5)
@@ -309,6 +314,10 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
             return true
         }
         port = 3001
+        guard productionBuildExists() else {
+            launchError = "还没有生产构建。在项目目录执行 npm run build 后再打开。"
+            return false
+        }
         guard startServer() else { return false }
         let deadline = Date().addingTimeInterval(45)
         while Date() < deadline {
@@ -332,7 +341,7 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         guard let log = try? FileHandle(forWritingTo: logURL) else { return false }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: node)
-        proc.arguments = [next, "dev", "--port", String(port)]
+        proc.arguments = [next, "start", "--hostname", "127.0.0.1", "--port", String(port)]
         proc.currentDirectoryURL = URL(fileURLWithPath: root)
         var env = ProcessInfo.processInfo.environment
         let nodeBin = (node as NSString).deletingLastPathComponent

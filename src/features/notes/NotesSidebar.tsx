@@ -8,11 +8,24 @@ import {
   filterNotes,
   formatNoteTime,
   orderNotesByRecent,
+  matchSnippet,
   previewText,
   pushRecentNoteId,
   readRecentNoteIds,
   type NoteFilter,
 } from "./browse";
+
+function renderPreview(text: string, query: string) {
+  const snippet = query.trim() ? matchSnippet(text, query) : null;
+  if (!snippet) return previewText(text);
+  return (
+    <>
+      {snippet.before}
+      <mark>{snippet.match}</mark>
+      {snippet.after}
+    </>
+  );
+}
 
 export function NotesSidebar(props: {
   notes: NoteRow[];
@@ -65,7 +78,8 @@ export function NotesSidebar(props: {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索"
+          placeholder="搜索标题和正文"
+          aria-label="搜索标题和正文"
           autoComplete="off"
         />
         {query ? (
@@ -128,7 +142,7 @@ export function NotesSidebar(props: {
                       <strong>{note.title || "未命名笔记"}</strong>
                       <time>{formatNoteTime(note.updatedAt)}</time>
                     </div>
-                    <p>{previewText(note.contentText)}</p>
+                    <p>{renderPreview(note.contentText, query)}</p>
                     {note.isFavorite ? <span className="row-fav">★</span> : null}
                   </button>
                   {props.onDelete ? (

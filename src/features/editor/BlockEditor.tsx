@@ -6,7 +6,6 @@ import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import Table from "@tiptap/extension-table";
 import TableCell from "@tiptap/extension-table-cell";
@@ -17,6 +16,8 @@ import { Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { HIGHLIGHT_COLORS, parseDocument, type TipTapDoc } from "@/lib/document";
 import type { ReviewMark } from "@/domain/review";
+import { findExtension, findInText, findPluginKey, type FindState } from "./find";
+import { ZoomImage } from "./zoom-image";
 
 declare global {
   interface Window {
@@ -31,6 +32,37 @@ export type EditorReview = {
 };
 
 const reviewPluginKey = new PluginKey("review-marks");
+const codeLanguageKey = new PluginKey("code-language");
+
+function codeLanguageExtension() {
+  return Extension.create({
+    name: "codeLanguage",
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          key: codeLanguageKey,
+          props: {
+            decorations(state) {
+              const decos: Decoration[] = [];
+              state.doc.descendants((node, pos) => {
+                if (node.type.name !== "codeBlock") return;
+                const language = String(node.attrs.language ?? "").trim();
+                if (!language) return;
+                decos.push(
+                  Decoration.node(pos, pos + node.nodeSize, {
+                    class: "has-lang",
+                    "data-language": language,
+                  }),
+                );
+              });
+              return DecorationSet.create(state.doc, decos);
+            },
+          },
+        }),
+      ];
+    },
+  });
+}
 
 function reviewExtension(reviewRef: { current: EditorReview | null }) {
   return Extension.create({
@@ -219,7 +251,12 @@ export function BlockEditor(props: {
   const [styleOpen, setStyleOpen] = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
   const [toolbarStuck, setToolbarStuck] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findActive, setFindActive] = useState(0);
+  const [findTotal, setFindTotal] = useState(0);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const findRef = useRef<FindState>({ query: "", active: 0 });
   const styleRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<EditorReview | null>(props.review ?? null);
@@ -241,10 +278,12 @@ export function BlockEditor(props: {
       Underline,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false, autolink: true }),
-      Image,
+      ZoomImage,
       persistImages,
       Placeholder.configure({ placeholder: "写下你真正理解过的内容…" }),
+      codeLanguageExtension(),
       reviewExtension(reviewRef),
+      findExtension(findRef),
     ],
     content: parseDocument(props.contentJson),
     editorProps: {
@@ -298,6 +337,51 @@ export function BlockEditor(props: {
       // Editor view is not mounted yet.
     }
   }, [editor, reviewSignature]);
+
+  useEffect(() => {
+    findRef.current = { query: findQuery, active: findActive };
+    if (!editor || editor.isDestroyed) return;
+    let total = 0;
+    const query = findQuery.trim();
+    if (query) {
+      editor.state.doc.descendants((node) => {
+        if (node.isText && node.text) total += findInText(node.text, query).length;
+      });
+    }
+    setFindTotal(total);
+    if (total > 0 && findActive >= total) {
+      setFindActive(0);
+      return;
+    }
+    try {
+      editor.view.dispatch(editor.state.tr.setMeta(findPluginKey, true));
+      requestAnimationFrame(() => {
+        if (editor.isDestroyed) return;
+        editor.view.dom.querySelector(".find-hit.is-current")?.scrollIntoView({
+          block: "center",
+          inline: "nearest",
+        });
+      });
+    } catch {
+      // Editor view is not mounted yet.
+    }
+  }, [editor, findQuery, findActive]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function stepFind(delta: number) {
+    if (findTotal <= 0) return;
+    setFindActive((index) => (index + delta + findTotal) % findTotal);
+  }
 
   useEffect(() => {
     const node = toolbarRef.current;
@@ -491,7 +575,37 @@ export function BlockEditor(props: {
             ) : null}
           </div>
         </div>
-
+        <div className="note-find">
+          <input
+            ref={findInputRef}
+            value={findQuery}
+            placeholder="搜索正文"
+            aria-label="搜索正文"
+            onChange={(event) => {
+              setFindQuery(event.target.value);
+              setFindActive(0);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                stepFind(event.shiftKey ? -1 : 1);
+              } else if (event.key === "Escape") {
+                setFindQuery("");
+                setFindActive(0);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <span className="note-find-count">
+            {findQuery.trim() ? (findTotal ? `${findActive + 1}/${findTotal}` : "没有") : ""}
+          </span>
+          <button type="button" className="tb-btn" disabled={!findTotal} onClick={() => stepFind(-1)}>
+            上一个
+          </button>
+          <button type="button" className="tb-btn" disabled={!findTotal} onClick={() => stepFind(1)}>
+            下一个
+          </button>
+        </div>
       </div>
       <EditorContent editor={ed} />
     </>

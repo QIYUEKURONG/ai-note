@@ -96,6 +96,28 @@ export function previewText(text: string, max = 72): string {
   return cleaned.length > max ? `${cleaned.slice(0, max)}…` : cleaned;
 }
 
+/** Window around the first content hit, so a body search shows where it matched. */
+export function matchSnippet(
+  text: string,
+  query: string,
+  radius = 22,
+): { before: string; match: string; after: string } | null {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  const needle = query.trim().toLowerCase();
+  if (!cleaned || !needle) return null;
+  const hay = cleaned.toLowerCase();
+  if (hay.length !== cleaned.length || needle.length !== query.trim().length) return null;
+  const at = hay.indexOf(needle);
+  if (at < 0) return null;
+  const start = Math.max(0, at - radius);
+  const end = Math.min(cleaned.length, at + needle.length + radius);
+  return {
+    before: `${start > 0 ? "…" : ""}${cleaned.slice(start, at)}`,
+    match: cleaned.slice(at, at + needle.length),
+    after: `${cleaned.slice(at + needle.length, end)}${end < cleaned.length ? "…" : ""}`,
+  };
+}
+
 const RECENT_KEY = "mindbook.recentNoteIds";
 
 export function readRecentNoteIds(limit = 12): string[] {

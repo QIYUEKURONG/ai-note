@@ -1,8 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mediaUrl } from "@/lib/client";
 import type { HungItem } from "./PaperStage";
+
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 4;
+
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(value * 100) / 100));
+}
 
 export function ImageLightbox(props: {
   image: HungItem;
@@ -13,8 +20,25 @@ export function ImageLightbox(props: {
   onInsert: (noteId: string) => void;
 }) {
   const src = mediaUrl(props.image.filePath);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [picking, setPicking] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    setZoom(1);
+  }, [props.image.id]);
+
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      setZoom((value) => clampZoom(value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, []);
 
   async function copyImage() {
     const response = await fetch(src);
@@ -24,11 +48,32 @@ export function ImageLightbox(props: {
     setCopied(true);
   }
 
+  const fitted = zoom <= 1;
+
   return (
     <div className="lightbox">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="原图预览" />
+      <div className="lightbox-stage" ref={stageRef}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt="原图预览"
+          style={{
+            width: `${Math.round(72 * zoom)}vw`,
+            maxWidth: fitted ? "92vw" : "none",
+            maxHeight: fitted ? "78vh" : "none",
+          }}
+        />
+      </div>
       <div className="lightbox-bar">
+        <button type="button" className="btn ghost" onClick={() => setZoom((value) => clampZoom(value / 1.25))}>
+          缩小
+        </button>
+        <button type="button" className="btn ghost" onClick={() => setZoom(1)}>
+          原始
+        </button>
+        <button type="button" className="btn ghost" onClick={() => setZoom((value) => clampZoom(value * 1.25))}>
+          放大
+        </button>
         <button
           className="btn ghost"
           onClick={() => {

@@ -25,7 +25,7 @@ export function HungImage(props: {
         ["--hung-top" as string]: `${props.stickTop}px`,
       }}
       onPointerDown={(event) => {
-        if ((event.target as HTMLElement).closest(".resize-handle")) return;
+        if ((event.target as HTMLElement).closest(".resize-handle, .hung-zoom")) return;
         dragging.current = true;
         origin.current = {
           x: event.clientX,
@@ -44,6 +44,7 @@ export function HungImage(props: {
         );
       }}
       onPointerUp={(event) => {
+        if ((event.target as HTMLElement).closest(".hung-zoom")) return;
         const moved =
           Math.abs(event.clientX - origin.current.x) + Math.abs(event.clientY - origin.current.y);
         dragging.current = false;
@@ -60,6 +61,26 @@ export function HungImage(props: {
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={props.src} alt="AI 生成图片" draggable={false} />
+      <div className="hung-zoom">
+        <button
+          type="button"
+          onClick={() => {
+            const current = props.layout.width / 168;
+            props.onScale(Math.min(2.8, Math.max(0.45, current * 0.8)));
+          }}
+        >
+          缩小
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const current = props.layout.width / 168;
+            props.onScale(Math.min(2.8, Math.max(0.45, current * 1.25)));
+          }}
+        >
+          放大
+        </button>
+      </div>
       <button
         type="button"
         className="resize-handle"

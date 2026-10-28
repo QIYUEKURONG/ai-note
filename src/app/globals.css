@@ -841,6 +841,23 @@ button {
   background:
     linear-gradient(135deg, transparent 50%, rgba(44, 41, 38, 0.35) 50%);
 }
+.hung-zoom {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  display: none;
+  gap: 4px;
+}
+.hung:hover .hung-zoom { display: flex; }
+.hung-zoom button {
+  border: 0;
+  border-radius: 7px;
+  padding: 2px 6px;
+  background: rgba(28, 22, 16, 0.72);
+  color: #f6efe6;
+  font-size: 11px;
+  cursor: pointer;
+}
 .pin-line {
   position: absolute;
   z-index: 2;
@@ -864,6 +881,19 @@ button {
 .ProseMirror h2 { font-size: 1.35em; font-weight: 600; margin: 1.3em 0 0.45em; }
 .ProseMirror h3 { font-size: 1.12em; font-weight: 600; margin: 1.1em 0 0.4em; }
 .ProseMirror p { margin: 0.55em 0; }
+.ProseMirror ul,
+.ProseMirror ol { margin: 0.4em 0 0.8em; padding-left: 1.4em; }
+.ProseMirror pre.has-lang { padding-top: 28px; }
+.ProseMirror pre.has-lang::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-family: "Avenir Next", "PingFang SC", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8a8178;
+}
 .ProseMirror blockquote {
   margin: 1em 0;
   padding-left: 1em;
@@ -900,6 +930,84 @@ button {
   height: auto;
   margin: 12px 0;
   border-radius: 4px;
+}
+.ProseMirror .find-hit {
+  background: #ffe08a;
+  border-radius: 2px;
+}
+.ProseMirror .find-hit.is-current {
+  background: #f0b429;
+  box-shadow: 0 0 0 1px rgba(140, 90, 10, 0.35);
+}
+.note-image {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  margin: 12px 0;
+}
+.note-image img {
+  display: block;
+  width: auto;
+  max-width: min(100%, 640px);
+  height: auto;
+  margin: 0;
+  border-radius: 4px;
+}
+.note-image[style*="width"] img {
+  width: 100%;
+  max-width: 100%;
+}
+.note-image-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: none;
+  gap: 6px;
+}
+.note-image:hover .note-image-zoom,
+.note-image.ProseMirror-selectednode .note-image-zoom {
+  display: flex;
+}
+.note-image-zoom-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(28, 22, 16, 0.78);
+  color: #f6efe6;
+  font-size: 12px;
+  cursor: pointer;
+}
+.note-find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+.note-find input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--paper-ink, #2c241b) 16%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  padding: 0 8px;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+.note-find-count {
+  flex: none;
+  min-width: 2.6em;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--paper-ink, #2c241b) 55%, transparent);
+}
+.note-row mark {
+  background: #f3d48a;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.1em;
 }
 .ProseMirror a { color: var(--paper-accent, var(--accent)); text-decoration: underline; }
 .ProseMirror table {
@@ -1020,11 +1128,20 @@ button {
   flex-direction: column;
   color: #f6efe6;
 }
-.lightbox img {
-  margin: auto;
-  max-width: 92vw;
-  max-height: 78vh;
+.lightbox-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.lightbox-stage img {
+  margin: 0;
+  height: auto;
   object-fit: contain;
+  flex: none;
 }
 .lightbox-bar {
   display: flex;
