@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { NoteRow } from "@/db/schema";
 import { GearIcon, TrashIcon } from "@/components/Icons";
 import { ApiKeysPanel } from "@/features/settings/ApiKeysPanel";
@@ -36,6 +38,7 @@ export function NotesSidebar(props: {
   creating?: boolean;
   compact?: boolean;
 }) {
+  const path = usePathname();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<NoteFilter>("all");
   const [recentIds, setRecentIds] = useState<string[]>([]);
@@ -54,7 +57,9 @@ export function NotesSidebar(props: {
     <aside className={`notes-sidebar ${props.compact ? "is-compact" : ""}`}>
       <div className="sidebar-brand">
         <div>
-          <div className="sidebar-logo">MindBook</div>
+          <Link href="/" className="sidebar-logo">
+            MindBook
+          </Link>
           <div className="sidebar-sub">笔记</div>
         </div>
         <div className="sidebar-brand-actions">
@@ -72,6 +77,15 @@ export function NotesSidebar(props: {
           </button>
         </div>
       </div>
+
+      <nav className="sidebar-nav" aria-label="位置">
+        <Link href="/" className={path === "/" ? "is-on" : ""}>
+          空间
+        </Link>
+        <Link href="/calendar" className={path.startsWith("/calendar") ? "is-on" : ""}>
+          日历
+        </Link>
+      </nav>
 
       <label className="sidebar-search">
         <span className="search-icon">⌕</span>

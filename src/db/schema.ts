@@ -224,6 +224,15 @@ export const knowledgeGaps = sqliteTable("knowledge_gaps", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const calendarSlips = sqliteTable("calendar_slips", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull(),
+  body: text("body").notNull(),
+  color: text("color").notNull().default("cream"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const reminders = sqliteTable("reminders", {
   id: text("id").primaryKey(),
   noteId: text("note_id")
@@ -271,4 +280,5 @@ export type CheckSessionRow = typeof checkSessions.$inferSelect;
 export type CheckQuestionRow = typeof checkQuestions.$inferSelect;
 export type InterviewSessionRow = typeof interviewSessions.$inferSelect;
 export type InterviewTurnRow = typeof interviewTurns.$inferSelect;
+export type CalendarSlipRow = typeof calendarSlips.$inferSelect;
 

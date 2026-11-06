@@ -168,6 +168,15 @@ const STATEMENTS = [
     note_id TEXT REFERENCES notes(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS calendar_slips (
+    id TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    body TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT 'cream',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS calendar_slips_day ON calendar_slips(day)`,
   `CREATE TABLE IF NOT EXISTS reminders (
     id TEXT PRIMARY KEY,
     note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,

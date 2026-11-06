@@ -6,6 +6,11 @@ import { documentFromOrganizedMarkdown, type TipTapNode } from "@/lib/document";
 import type { AIResultRow } from "@/db/schema";
 
 const FOCUS: Array<{ id: OrganizeKind; hint: string }> = [
+  { id: "structure_only", hint: "不修改正文，只修改结构" },
+  { id: "quote_cards", hint: "每句原样放进一张引用卡片" },
+  { id: "pull_quotes", hint: "关键句挂出来，其余收成列表" },
+  { id: "stair_steps", hint: "按先后排成台阶，句子保持原样" },
+  { id: "ruled_sections", hint: "用分隔线切开主题，句子保持原样" },
   { id: "study_note", hint: "小标题、代码框、重点词，适合复习" },
   { id: "code_box", hint: "把代码和命令放进独立的框" },
   { id: "key_terms", hint: "给必须记住的词标上重点" },
