@@ -85,6 +85,7 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     private weak var exportReply: WKWebView?
     private var petWindow: NSWindow?
     private var server: Process?
+    private var prepare: Process?
     private var startedServer = false
     private let session = URLSession(configuration: .ephemeral)
     private var port = 3001
@@ -119,6 +120,7 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let prepare, prepare.isRunning { prepare.terminate() }
         guard startedServer, let server, server.isRunning else { return }
         server.terminate()
     }
@@ -270,11 +272,18 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
 
     private func showStatus(_ text: String, on window: NSWindow) {
         let label = NSTextField(wrappingLabelWithString: text)
-        label.frame = NSRect(x: 36, y: (window.contentView?.bounds.midY ?? 200) - 20, width: 520, height: 48)
+        label.frame = NSRect(x: 36, y: (window.contentView?.bounds.midY ?? 200) - 36, width: 640, height: 72)
         label.textColor = NSColor(calibratedWhite: 0.25, alpha: 1)
         label.tag = 42
         window.contentView?.viewWithTag(42)?.removeFromSuperview()
         window.contentView?.addSubview(label)
+    }
+
+    private func setStatus(_ text: String) {
+        DispatchQueue.main.async {
+            guard let window = self.mainWindow else { return }
+            self.showStatus(text, on: window)
+        }
     }
 
     private func clearStatus(on window: NSWindow) {
@@ -289,6 +298,45 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
 
     private func productionBuildExists() -> Bool {
         FileManager.default.fileExists(atPath: projectRoot() + "/.next/required-server-files.json")
+    }
+
+    private func modificationDate(_ path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    }
+
+    private func newestDate(_ path: String) -> Date? {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir) else { return nil }
+        if !isDir.boolValue { return modificationDate(path) }
+        guard let enumerator = FileManager.default.enumerator(
+            at: URL(fileURLWithPath: path),
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return modificationDate(path)
+        }
+        var newest = modificationDate(path) ?? .distantPast
+        for case let url as URL in enumerator {
+            let name = url.lastPathComponent
+            if name == "node_modules" || name == ".next" {
+                enumerator.skipDescendants()
+                continue
+            }
+            if let date = modificationDate(url.path), date > newest { newest = date }
+        }
+        return newest
+    }
+
+    private func productionBuildIsCurrent() -> Bool {
+        guard productionBuildExists(),
+              let built = modificationDate(projectRoot() + "/.next/required-server-files.json") else {
+            return false
+        }
+        let root = projectRoot()
+        for relative in ["src", "package.json", "package-lock.json", "next.config.ts", "next.config.mjs", "next.config.js", "tsconfig.json"] {
+            if let changed = newestDate(root + "/" + relative), changed > built { return false }
+        }
+        return true
     }
 
     private func mindBookPort(_ candidate: Int) -> Bool {
@@ -314,9 +362,9 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
             return true
         }
         port = 3001
-        guard productionBuildExists() else {
-            launchError = "还没有生产构建。在项目目录执行 npm run build 后再打开。"
-            return false
+        if !productionBuildIsCurrent() {
+            setStatus("正在准备笔记，稍等一会儿…")
+            guard buildProduction() else { return false }
         }
         guard startServer() else { return false }
         let deadline = Date().addingTimeInterval(45)
@@ -327,21 +375,28 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         return false
     }
 
-    private func startServer() -> Bool {
+    private func nodeProcess(_ arguments: [String]) -> Process? {
         let root = projectRoot()
         let node = root + "/.tools/node/bin/node"
         let next = root + "/node_modules/next/dist/bin/next"
         guard FileManager.default.isExecutableFile(atPath: node),
               FileManager.default.fileExists(atPath: next) else {
-            return false
+            launchError = "找不到本机的 Node，笔记没有准备好。"
+            return nil
         }
         let logURL = URL(fileURLWithPath: root + "/data/mindbook-app.log")
         try? FileManager.default.createDirectory(at: URL(fileURLWithPath: root + "/data"), withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        guard let log = try? FileHandle(forWritingTo: logURL) else { return false }
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+        guard let log = try? FileHandle(forWritingTo: logURL) else {
+            launchError = "写不了日志，笔记没有准备好。"
+            return nil
+        }
+        _ = try? log.seekToEnd()
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: node)
-        proc.arguments = [next, "start", "--hostname", "127.0.0.1", "--port", String(port)]
+        proc.arguments = [next] + arguments
         proc.currentDirectoryURL = URL(fileURLWithPath: root)
         var env = ProcessInfo.processInfo.environment
         let nodeBin = (node as NSString).deletingLastPathComponent
@@ -349,9 +404,33 @@ final class MindBookApp: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         proc.environment = env
         proc.standardOutput = log
         proc.standardError = log
+        return proc
+    }
+
+    private func buildProduction() -> Bool {
+        guard let proc = nodeProcess(["build"]) else { return false }
+        prepare = proc
         do {
             try proc.run()
         } catch {
+            launchError = "准备没有开始。日志在项目里的 data/mindbook-app.log"
+            return false
+        }
+        proc.waitUntilExit()
+        prepare = nil
+        guard proc.terminationStatus == 0, productionBuildExists() else {
+            launchError = "准备没有完成。日志在项目里的 data/mindbook-app.log"
+            return false
+        }
+        return true
+    }
+
+    private func startServer() -> Bool {
+        guard let proc = nodeProcess(["start", "--hostname", "127.0.0.1", "--port", String(port)]) else { return false }
+        do {
+            try proc.run()
+        } catch {
+            launchError = "本地服务没有起来。日志在项目里的 data/mindbook-app.log"
             return false
         }
         server = proc

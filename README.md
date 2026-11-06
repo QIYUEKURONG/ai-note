@@ -60,9 +60,9 @@ npm run dev
 
 ## 本地应用
 
-桌面和启动台里的 `MindBook.app` 是本地窗口，打开的还是这个项目。第一次若被系统拦住，在图标上右键选「打开」。界面改动已经打进当前的生产构建，不需要重新编译这个应用；只有改了 `desktop/MindBook.swift` 才需要按下面的步骤重装。
+桌面和启动台里的 `MindBook.app` 是本地窗口，打开的还是这个项目。第一次若被系统拦住，在图标上右键选「打开」。界面和接口有改动时，打开应用会自己准备，不用先在终端里构建。只有改了 `desktop/MindBook.swift` 才需要按下面的步骤重装。
 
-源码在 `desktop/MindBook.swift`，图标是 `desktop/AppIcon.icns`。应用会读包内 `Contents/Resources/project-root` 里的项目路径。它先找已经开着的 MindBook（3001，其次 3000）。都没有时，在 3001 拉起生产服务 `next start`（只监听本机）。所以平时打开应用之前要先在项目目录执行一次 `npm run build`。改了界面或接口之后也要重新构建，再生产服务才会变。写代码时先自己跑 `npm run dev`（3000），再打开应用，窗口会连上这个开发服务，而不会再拉起一个。窗口里可以用 Command+C / V 复制和粘贴，截图也会贴进正文。导出的文件会保存到「下载」。
+源码在 `desktop/MindBook.swift`，图标是 `desktop/AppIcon.icns`。应用会读包内 `Contents/Resources/project-root` 里的项目路径。它先找已经开着的 MindBook（3001，其次 3000）。都没有时，自己准备生产构建，再在 3001 拉起 `next start`（只监听本机）。代码比上次构建新的时候也会重新准备，窗口上会写「正在准备笔记，稍等一会儿…」。写代码时先自己跑 `npm run dev`（3000），再打开应用，窗口会连上这个开发服务，而不会再拉起一个。窗口里可以用 Command+C / V 复制和粘贴，截图也会贴进正文。导出的文件会保存到「下载」。
 
 重新编译并装到桌面和启动台：
 
