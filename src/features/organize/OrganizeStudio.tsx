@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { displayedCalloutLabel } from "@/domain/blocks";
 import { ORGANIZE_KINDS, organizeKindLabel, type OrganizeKind } from "@/domain/organize-kinds";
 import { documentFromOrganizedMarkdown, type TipTapNode } from "@/lib/document";
 import type { AIResultRow } from "@/db/schema";
@@ -179,11 +180,24 @@ function RichNode(props: { node: TipTapNode }) {
   const children = node.content?.map((child, index) => <RichNode key={index} node={child} />) ?? null;
   if (node.type === "heading") {
     const level = Number(node.attrs?.level ?? 2);
-    if (level <= 2) return <h3>{children}</h3>;
-    return <h4>{children}</h4>;
+    const parallel = typeof node.attrs?.parallel === "string" ? node.attrs.parallel : undefined;
+    if (level <= 2) return <h3 data-parallel={parallel}>{children}</h3>;
+    return <h4 data-parallel={parallel}>{children}</h4>;
   }
   if (node.type === "paragraph") return <p>{children}</p>;
-  if (node.type === "bulletList") return <ul>{children}</ul>;
+  if (node.type === "callout") {
+    const kind = String(node.attrs?.kind ?? "note");
+    return (
+      <aside className={`callout callout-${kind}`} data-callout={kind}>
+        <span className="callout-label">{displayedCalloutLabel(kind, node.attrs?.label)}</span>
+        <div className="callout-body">{children}</div>
+      </aside>
+    );
+  }
+  if (node.type === "bulletList") {
+    const marker = typeof node.attrs?.marker === "string" ? node.attrs.marker : undefined;
+    return <ul data-marker={marker}>{children}</ul>;
+  }
   if (node.type === "orderedList") return <ol>{children}</ol>;
   if (node.type === "listItem") return <li>{children}</li>;
   if (node.type === "blockquote") return <blockquote>{children}</blockquote>;

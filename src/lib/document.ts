@@ -1,3 +1,5 @@
+import { calloutHeading, displayedCalloutLabel, markerByGlyphPrefix } from "@/domain/blocks";
+
 export type TipTapNode = {
   type: string;
   attrs?: Record<string, unknown>;
@@ -41,6 +43,9 @@ export function documentToText(doc: TipTapDoc | TipTapNode): string {
 }
 
 function walkText(node: TipTapNode, parts: string[]) {
+  if (node.type === "callout") {
+    parts.push(`${displayedCalloutLabel(String(node.attrs?.kind ?? "note"), node.attrs?.label)}\n`);
+  }
   if (node.text) {
     parts.push(node.text);
   }
@@ -52,6 +57,7 @@ function walkText(node: TipTapNode, parts: string[]) {
       node.type === "paragraph" ||
       node.type === "heading" ||
       node.type === "blockquote" ||
+      node.type === "callout" ||
       node.type === "listItem" ||
       node.type === "codeBlock" ||
       node.type === "horizontalRule"
@@ -316,6 +322,9 @@ export function noteSourceForOrganize(doc: TipTapDoc): string {
       parts.push(`[[图${count}]]\n`);
       return;
     }
+    if (node.type === "callout") {
+      parts.push(`${displayedCalloutLabel(String(node.attrs?.kind ?? "note"), node.attrs?.label)}\n`);
+    }
     if (node.text) parts.push(node.text);
     if (!node.content) return;
     for (const child of node.content) walk(child);
@@ -323,6 +332,7 @@ export function noteSourceForOrganize(doc: TipTapDoc): string {
       node.type === "paragraph" ||
       node.type === "heading" ||
       node.type === "blockquote" ||
+      node.type === "callout" ||
       node.type === "listItem" ||
       node.type === "codeBlock" ||
       node.type === "horizontalRule"
@@ -389,7 +399,7 @@ export function markdownToNodes(markdown: string): TipTapNode[] {
   const lines = markdown.split("\n");
   const nodes: TipTapNode[] = [];
   let paragraph: string[] = [];
-  let list: { ordered: boolean; items: string[] } | null = null;
+  let list: { ordered: boolean; marker: string | null; items: string[] } | null = null;
   let quote: string[] = [];
 
   const flushParagraph = () => {
@@ -401,6 +411,7 @@ export function markdownToNodes(markdown: string): TipTapNode[] {
     if (!list) return;
     nodes.push({
       type: list.ordered ? "orderedList" : "bulletList",
+      ...(list.marker ? { attrs: { marker: list.marker } } : {}),
       content: list.items.map((item) => ({
         type: "listItem",
         content: blocksFromLines([item]),
@@ -441,6 +452,25 @@ export function markdownToNodes(markdown: string): TipTapNode[] {
       });
       continue;
     }
+    if (trimmed.startsWith(":::")) {
+      const heading = calloutHeading(trimmed.slice(3));
+      if (heading.kind && trimmed.slice(3).trim()) {
+        flushFlow();
+        const body: string[] = [];
+        index += 1;
+        while (index < lines.length && lines[index].trim() !== ":::") {
+          body.push(lines[index]);
+          index += 1;
+        }
+        const inner = markdownToNodes(body.join("\n"));
+        nodes.push({
+          type: "callout",
+          attrs: heading.label ? { kind: heading.kind, label: heading.label } : { kind: heading.kind },
+          content: inner.length ? inner : [{ type: "paragraph" }],
+        });
+        continue;
+      }
+    }
     if (!trimmed) {
       flushFlow();
       continue;
@@ -469,21 +499,34 @@ export function markdownToNodes(markdown: string): TipTapNode[] {
     if (heading) {
       flushFlow();
       const level = heading[1].length === 1 ? 2 : 3;
-      const content = inlineText(heading[2]);
+      const markedTitle = markerByGlyphPrefix(heading[2]);
+      const title = markedTitle ? markedTitle.rest : heading[2];
+      const content = inlineText(title);
       nodes.push({
         type: "heading",
-        attrs: { level },
+        attrs: markedTitle ? { level, parallel: markedTitle.id } : { level },
         content: content.length ? content : [],
       });
+      continue;
+    }
+    const markedLine = markerByGlyphPrefix(trimmed);
+    if (markedLine) {
+      flushParagraph();
+      flushQuote();
+      if (!list || list.ordered || list.marker !== markedLine.id) {
+        flushList();
+        list = { ordered: false, marker: markedLine.id, items: [] };
+      }
+      list.items.push(markedLine.rest);
       continue;
     }
     const bullet = /^(?:[-*]|•)\s+(.+)$/.exec(trimmed);
     if (bullet) {
       flushParagraph();
       flushQuote();
-      if (!list || list.ordered) {
+      if (!list || list.ordered || list.marker) {
         flushList();
-        list = { ordered: false, items: [] };
+        list = { ordered: false, marker: null, items: [] };
       }
       list.items.push(bullet[1]);
       continue;
@@ -494,7 +537,7 @@ export function markdownToNodes(markdown: string): TipTapNode[] {
       flushQuote();
       if (!list || !list.ordered) {
         flushList();
-        list = { ordered: true, items: [] };
+        list = { ordered: true, marker: null, items: [] };
       }
       list.items.push(ordered[1]);
       continue;
@@ -568,7 +611,7 @@ function isVacantContent(type: string, content: TipTapNode[]): boolean {
       (child) => child.type === "hardBreak" || (child.type === "text" && !child.text) || isVacantNode(child),
     );
   }
-  if (type === "listItem" || type === "bulletList" || type === "orderedList" || type === "blockquote") {
+  if (type === "listItem" || type === "bulletList" || type === "orderedList" || type === "blockquote" || type === "callout") {
     return content.length === 0 || content.every(isVacantNode);
   }
   return false;

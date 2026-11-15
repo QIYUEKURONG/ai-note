@@ -14,8 +14,10 @@ import TableRow from "@tiptap/extension-table-row";
 import Underline from "@tiptap/extension-underline";
 import { Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { CALLOUTS, MARKERS, markerGlyph } from "@/domain/blocks";
 import { HIGHLIGHT_COLORS, parseDocument, type TipTapDoc } from "@/lib/document";
 import type { ReviewMark } from "@/domain/review";
+import { applyCallout, applyParallelMarker, Callout, MarkedBulletList, MarkedHeading } from "./boxes";
 import { findExtension, findInText, findPluginKey, type FindState } from "./find";
 import { ZoomImage } from "./zoom-image";
 
@@ -249,6 +251,7 @@ export function BlockEditor(props: {
   review?: EditorReview | null;
 }) {
   const [styleOpen, setStyleOpen] = useState(false);
+  const [markerOpen, setMarkerOpen] = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
   const [toolbarStuck, setToolbarStuck] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -258,6 +261,7 @@ export function BlockEditor(props: {
   const findInputRef = useRef<HTMLInputElement>(null);
   const findRef = useRef<FindState>({ query: "", active: 0 });
   const styleRef = useRef<HTMLDivElement>(null);
+  const markerRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<EditorReview | null>(props.review ?? null);
   reviewRef.current = props.review ?? null;
@@ -270,7 +274,10 @@ export function BlockEditor(props: {
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, dropcursor: false }),
+      StarterKit.configure({ heading: false, bulletList: false, dropcursor: false }),
+      MarkedHeading.configure({ levels: [1, 2, 3] }),
+      MarkedBulletList,
+      Callout,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -410,6 +417,7 @@ export function BlockEditor(props: {
     function onDocClick(event: MouseEvent) {
       const target = event.target as Node;
       if (styleRef.current && !styleRef.current.contains(target)) setStyleOpen(false);
+      if (markerRef.current && !markerRef.current.contains(target)) setMarkerOpen(false);
       if (highlightRef.current && !highlightRef.current.contains(target)) setHighlightOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
@@ -419,7 +427,11 @@ export function BlockEditor(props: {
   if (!editor) return null;
   const ed = editor;
 
-  function currentStyle(): StyleId {
+  function currentStyle(): string {
+    if (ed.isActive("callout")) {
+      const kind = ed.getAttributes("callout").kind;
+      if (typeof kind === "string" && kind) return kind;
+    }
     if (ed.isActive("heading", { level: 1 })) return "title";
     if (ed.isActive("heading", { level: 2 })) return "heading";
     if (ed.isActive("heading", { level: 3 })) return "subheading";
@@ -428,7 +440,24 @@ export function BlockEditor(props: {
     return "body";
   }
 
+  function closeMenus() {
+    setStyleOpen(false);
+    setMarkerOpen(false);
+    setHighlightOpen(false);
+  }
+
   function applyStyle(id: StyleId) {
+    if (
+      id === "body" &&
+      ed.isActive("callout") &&
+      !ed.isActive("heading") &&
+      !ed.isActive("blockquote") &&
+      !ed.isActive("codeBlock")
+    ) {
+      ed.chain().focus().lift("callout").run();
+      closeMenus();
+      return;
+    }
     const chain = ed.chain().focus();
     if (id === "title") chain.setHeading({ level: 1 }).run();
     else if (id === "heading") chain.setHeading({ level: 2 }).run();
@@ -436,7 +465,15 @@ export function BlockEditor(props: {
     else if (id === "quote") chain.setParagraph().toggleBlockquote().run();
     else if (id === "code") chain.setParagraph().toggleCodeBlock().run();
     else chain.setParagraph().run();
-    setStyleOpen(false);
+    closeMenus();
+  }
+
+  function activeMarker(): string | null {
+    const source = ed.isActive("bulletList") ? "bulletList" : ed.isActive("heading") ? "heading" : null;
+    if (!source) return null;
+    const key = source === "bulletList" ? "marker" : "parallel";
+    const value = ed.getAttributes(source)[key];
+    return typeof value === "string" && value ? value : null;
   }
 
   function setLink() {
@@ -455,7 +492,12 @@ export function BlockEditor(props: {
   }
 
   const activeStyle = currentStyle();
-  const activeStyleLabel = STYLES.find((item) => item.id === activeStyle)?.label ?? "正文";
+  const activeStyleLabel =
+    STYLES.find((item) => item.id === activeStyle)?.label ??
+    CALLOUTS.find((item) => item.id === activeStyle)?.label ??
+    "正文";
+  const marker = activeMarker();
+  const plainMarkerOn = !marker && (ed.isActive("bulletList") || ed.isActive("heading"));
 
   return (
     <>
@@ -468,6 +510,7 @@ export function BlockEditor(props: {
               onClick={() => {
                 setStyleOpen((v) => !v);
                 setHighlightOpen(false);
+                setMarkerOpen(false);
               }}
               title="段落样式"
             >
@@ -483,6 +526,21 @@ export function BlockEditor(props: {
                     type="button"
                     className={`style-item style-${item.id} ${activeStyle === item.id ? "is-active" : ""}`}
                     onClick={() => applyStyle(item.id)}
+                  >
+                    <span className="style-preview">{item.preview}</span>
+                    <span className="style-label">{item.label}</span>
+                  </button>
+                ))}
+                <div className="style-section">框</div>
+                {CALLOUTS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`style-item style-box style-box-${item.id} ${activeStyle === item.id ? "is-active" : ""}`}
+                    onClick={() => {
+                      applyCallout(ed, item.id);
+                      closeMenus();
+                    }}
                   >
                     <span className="style-preview">{item.preview}</span>
                     <span className="style-label">{item.label}</span>
@@ -532,6 +590,52 @@ export function BlockEditor(props: {
           >
             1.
           </button>
+          <div className="tb-dropdown" ref={markerRef}>
+            <button
+              type="button"
+              className={`tb-btn tb-marker ${markerOpen || marker ? "is-active" : ""}`}
+              onClick={() => {
+                setMarkerOpen((open) => !open);
+                setStyleOpen(false);
+                setHighlightOpen(false);
+              }}
+              title="标题下的并列符号"
+            >
+              <span className={`marker-glyph marker-${marker ?? "idle"}`}>{markerGlyph(marker) ?? "♥"}</span>
+              <span className="aa-label">并列</span>
+              <span className="chev">▾</span>
+            </button>
+            {markerOpen ? (
+              <div className="tb-menu marker-menu">
+                <p className="marker-hint">在标题上，这一节的并列换成同一个符号。在列表上，只换这一组。</p>
+                {MARKERS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`marker-item ${marker === item.id ? "is-active" : ""}`}
+                    onClick={() => {
+                      applyParallelMarker(ed, item.id);
+                      closeMenus();
+                    }}
+                  >
+                    <span className={`marker-glyph marker-${item.id}`}>{item.glyph}</span>
+                    <span className="marker-name">{item.label}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`marker-item ${plainMarkerOn ? "is-active" : ""}`}
+                  onClick={() => {
+                    applyParallelMarker(ed, null);
+                    closeMenus();
+                  }}
+                >
+                  <span className="marker-glyph marker-plain">•</span>
+                  <span className="marker-name">圆点</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button type="button" className="tb-btn" onClick={() => ed.chain().focus().setHorizontalRule().run()} title="分割线">
             —
           </button>
@@ -549,6 +653,7 @@ export function BlockEditor(props: {
               onClick={() => {
                 setHighlightOpen((v) => !v);
                 setStyleOpen(false);
+                setMarkerOpen(false);
               }}
               title="高亮"
             >

@@ -63,4 +63,34 @@ describe("export note", () => {
     expect(noteToHtml("小结", table)).toContain("<th>层</th><th>可丢性</th>");
     expect(noteToHtml("小结", table)).toContain("<td>MySQL</td><td>不丢</td>");
   });
+
+  it("exports callout boxes and parallel markers", () => {
+    const fancy: TipTapDoc = {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 2, parallel: "tree" }, content: [{ type: "text", text: "生长" }] },
+        {
+          type: "bulletList",
+          attrs: { marker: "heart" },
+          content: [
+            { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "喜欢" }] }] },
+          ],
+        },
+        {
+          type: "callout",
+          attrs: { kind: "tip", label: "先看左边" },
+          content: [{ type: "paragraph", content: [{ type: "text", text: "先写下来" }] }],
+        },
+      ],
+    };
+    const markdown = noteToMarkdown("标题", fancy);
+    expect(markdown).toContain("## 🌲 生长");
+    expect(markdown).toContain("♥ 喜欢");
+    expect(markdown).toContain(":::tip 先看左边\n先写下来\n:::");
+    const html = noteToHtml("标题", fancy);
+    expect(html).toContain('data-parallel="tree"');
+    expect(html).toContain('data-marker="heart"');
+    expect(html).toContain('data-callout="tip"');
+    expect(html).toContain("先看左边");
+  });
 });

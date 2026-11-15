@@ -105,6 +105,27 @@ describe("document", () => {
     expect(documentToText(doc)).toContain("先写进日志");
   });
 
+  it("reads callout boxes and parallel markers", () => {
+    const doc = documentFromOrganizedMarkdown(
+      ["## ♥ 并列", "", "♥ 桃心一项", "♥ 桃心二项", "🌲 树下一棵", "", ":::idea 二分之后", "突然想到", ":::", "", ":::灵感", "还是灵感", ":::"].join(
+        "\n",
+      ),
+      "笔记",
+    );
+    const heading = doc.content?.find((node) => node.attrs?.parallel === "heart");
+    expect(heading?.content?.[0]?.text).toBe("并列");
+    const lists = doc.content?.filter((node) => node.type === "bulletList") ?? [];
+    expect(lists.map((node) => node.attrs?.marker)).toEqual(["heart", "tree"]);
+    expect(lists[0]?.content).toHaveLength(2);
+    expect(documentToText(doc)).toContain("突然想到");
+    expect(doc.content?.filter((node) => node.type === "callout").map((node) => node.attrs?.kind)).toEqual([
+      "idea",
+      "idea",
+    ]);
+    expect(doc.content?.find((node) => node.type === "callout")?.attrs?.label).toBe("二分之后");
+    expect(documentToText(doc)).toContain("二分之后");
+  });
+
   it("keeps pictures when a note is rewritten", () => {
     const previous = {
       type: "doc" as const,
