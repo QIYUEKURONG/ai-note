@@ -1154,6 +1154,7 @@ button {
   height: auto;
   margin: 0;
   border-radius: 4px;
+  cursor: zoom-in;
 }
 .note-image[style*="width"] img {
   width: 100%;
@@ -1356,6 +1357,29 @@ button {
   height: auto;
   object-fit: contain;
   flex: none;
+}
+.note-preview .lightbox-stage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.note-preview-frame {
+  margin: auto;
+  flex: none;
+  line-height: 0;
+}
+.note-preview-frame img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 140px);
+  border-radius: 6px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+.note-preview-frame img[data-fitted="true"] {
+  max-width: none;
+  max-height: none;
 }
 .lightbox-bar {
   display: flex;

@@ -19,7 +19,8 @@ import { HIGHLIGHT_COLORS, parseDocument, type TipTapDoc } from "@/lib/document"
 import type { ReviewMark } from "@/domain/review";
 import { applyCallout, applyParallelMarker, Callout, MarkedBulletList, MarkedHeading } from "./boxes";
 import { findExtension, findInText, findPluginKey, type FindState } from "./find";
-import { ZoomImage } from "./zoom-image";
+import { NoteImagePreview } from "./image-preview";
+import { NOTE_IMAGE_PREVIEW_EVENT, ZoomImage } from "./zoom-image";
 
 declare global {
   interface Window {
@@ -254,6 +255,7 @@ export function BlockEditor(props: {
   const [markerOpen, setMarkerOpen] = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
   const [toolbarStuck, setToolbarStuck] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [findQuery, setFindQuery] = useState("");
   const [findActive, setFindActive] = useState(0);
   const [findTotal, setFindTotal] = useState(0);
@@ -373,6 +375,15 @@ export function BlockEditor(props: {
       // Editor view is not mounted yet.
     }
   }, [editor, findQuery, findActive]);
+
+  useEffect(() => {
+    const onPreview = (event: Event) => {
+      const src = (event as CustomEvent<{ src?: string }>).detail?.src;
+      if (typeof src === "string" && src) setPreviewSrc(src);
+    };
+    window.addEventListener(NOTE_IMAGE_PREVIEW_EVENT, onPreview);
+    return () => window.removeEventListener(NOTE_IMAGE_PREVIEW_EVENT, onPreview);
+  }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -713,6 +724,7 @@ export function BlockEditor(props: {
         </div>
       </div>
       <EditorContent editor={ed} />
+      {previewSrc ? <NoteImagePreview src={previewSrc} onClose={() => setPreviewSrc(null)} /> : null}
     </>
   );
 }
